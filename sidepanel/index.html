@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Intelligence</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Tab Intelligence</h1>
+          <p class="brand-subtitle">AI Tab Organizer</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-health" class="btn-icon status-badge" title="LLM Connection Status">
+          <span class="status-dot"></span>
+          <span id="provider-label" class="provider-label">Ollama</span>
+        </button>
+        <button id="btn-settings" class="btn-icon" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Quick Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-pill">
+        <span class="stat-num" id="stat-tabs">--</span>
+        <span class="stat-lbl">Tabs</span>
+      </div>
+      <div class="stat-pill">
+        <span class="stat-num" id="stat-windows">--</span>
+        <span class="stat-lbl">Windows</span>
+      </div>
+      <div class="stat-pill">
+        <span class="stat-num" id="stat-duplicates">0</span>
+        <span class="stat-lbl">Duplicates</span>
+      </div>
+      <button id="btn-refresh-stats" class="btn-stat-refresh" title="Refresh open tab counts">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Main Action Card -->
+    <section class="action-card">
+      <div class="options-row">
+        <div class="option-field">
+          <label for="select-scope">Scope</label>
+          <select id="select-scope" class="form-select">
+            <option value="all_windows">All Windows</option>
+            <option value="current_window">Current Window</option>
+          </select>
+        </div>
+        <div class="option-field">
+          <label for="select-consolidation">Placement</label>
+          <select id="select-consolidation" class="form-select">
+            <option value="in_place">Group In-Place</option>
+            <option value="consolidate_windows">Consolidate Windows</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="instructions-field">
+        <input type="text" id="input-instructions" class="form-input" placeholder="Custom focus (e.g., separate work from shopping)...">
+      </div>
+
+      <button id="btn-analyze" class="btn-primary">
+        <span class="btn-content">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>Analyze & Group Tabs</span>
+        </span>
+      </button>
+    </section>
+
+    <!-- Progress / Streaming Section -->
+    <section id="progress-card" class="progress-card hidden">
+      <div class="progress-header">
+        <div class="spinner"></div>
+        <div class="progress-info">
+          <span id="progress-stage" class="progress-stage">Processing</span>
+          <span id="progress-message" class="progress-desc">Starting analysis...</span>
+        </div>
+      </div>
+      <div class="progress-bar-container">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <details class="stream-details">
+        <summary>View Live LLM Output</summary>
+        <pre id="stream-output" class="stream-output"></pre>
+      </details>
+    </section>
+
+    <!-- Analysis Results & Diff View -->
+    <main id="results-container" class="results-container hidden">
+      <div class="results-header">
+        <div class="summary-box">
+          <h3 class="summary-title">Semantic Synthesis</h3>
+          <p id="results-summary" class="summary-text"></p>
+        </div>
+      </div>
+
+      <!-- Suggested Actions (Duplicates etc.) -->
+      <div id="actions-section" class="actions-section hidden">
+        <div class="section-label">Suggested Optimizations</div>
+        <div id="actions-list" class="actions-list"></div>
+      </div>
+
+      <!-- Groups List -->
+      <div class="groups-section">
+        <div class="section-label">Proposed Tab Groups</div>
+        <div id="groups-list" class="groups-list"></div>
+      </div>
+    </main>
+
+    <!-- Footer Controls (Apply & Undo) -->
+    <footer id="footer-actions" class="footer-actions hidden">
+      <button id="btn-undo" class="btn-secondary" title="Restore previous tab grouping">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"></polyline>
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+        </svg>
+        <span>Undo</span>
+      </button>
+      <button id="btn-apply" class="btn-success">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>Apply Groups</span>
+      </button>
+    </footer>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 class="modal-title">Select AI Provider</h2>
+          <button id="btn-close-settings" class="btn-icon">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Provider Dropdown Selector -->
+          <div class="form-group">
+            <label class="group-label" for="select-provider">AI Engine</label>
+            <select id="select-provider" class="form-select">
+              <optgroup label="🌐 Fast Cloud APIs">
+                <option value="groq">⚡ Groq (Free &amp; Ultra-Fast 800 tok/s)</option>
+                <option value="gemini">Google Gemini (Flash)</option>
+                <option value="claude">Anthropic Claude (Haiku/Sonnet)</option>
+                <option value="openai">OpenAI (GPT-4o mini)</option>
+                <option value="openrouter">OpenRouter (All Models)</option>
+              </optgroup>
+              <optgroup label="🔒 Local AI (100% Private)">
+                <option value="ollama">Ollama (Local Server)</option>
+                <option value="gemini_nano">Chrome Gemini Nano (On-Device)</option>
+                <option value="lm_studio">LM Studio / LocalAI</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <!-- Groq Panel -->
+          <div id="settings-panel-groq" class="provider-settings-panel hidden">
+            <div class="key-callout-banner groq-banner">
+              <div class="key-callout-info">
+                <div class="key-callout-badge groq-badge">⚡ 100% FREE • 800 TOK/S</div>
+                <div class="key-callout-subtitle">No credit card required</div>
+              </div>
+              <a href="https://console.groq.com/keys" target="_blank" class="btn-highlight-cta groq-cta">
+                <span>Get Free Groq Key</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
+            <div class="form-group">
+              <label for="cfg-groq-key">Groq API Key</label>
+              <input type="password" id="cfg-groq-key" class="form-input" placeholder="gsk_...">
+            </div>
+            <div class="form-group">
+              <label for="cfg-groq-model">Model</label>
+              <input type="text" id="cfg-groq-model" class="form-input" value="llama-3.3-70b-versatile" placeholder="llama-3.3-70b-versatile, llama-3.1-8b-instant">
+            </div>
+          </div>
+
+          <!-- Google Gemini Panel -->
+          <div id="settings-panel-gemini" class="provider-settings-panel hidden">
+            <div class="key-callout-banner gemini-banner">
+              <div class="key-callout-info">
+                <div class="key-callout-badge gemini-badge">✨ 100% FREE TIER</div>
+                <div class="key-callout-subtitle">Google AI Studio Key</div>
+              </div>
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn-highlight-cta gemini-cta">
+                <span>Get Free Gemini Key</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
+            <div class="form-group">
+              <label for="cfg-gemini-key">Gemini API Key</label>
+              <input type="password" id="cfg-gemini-key" class="form-input" placeholder="AIzaSy...">
+            </div>
+            <div class="form-group">
+              <label for="cfg-gemini-model">Model</label>
+              <input type="text" id="cfg-gemini-model" class="form-input" value="gemini-2.0-flash" placeholder="gemini-2.0-flash, gemini-1.5-flash">
+            </div>
+          </div>
+
+          <!-- Anthropic Claude Panel -->
+          <div id="settings-panel-claude" class="provider-settings-panel hidden">
+            <div class="key-callout-banner claude-banner">
+              <div class="key-callout-info">
+                <div class="key-callout-badge claude-badge">🧠 CLAUDE API</div>
+                <div class="key-callout-subtitle">Anthropic Console</div>
+              </div>
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" class="btn-highlight-cta claude-cta">
+                <span>Get Claude Key</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
+            <div class="form-group">
+              <label for="cfg-claude-key">Claude API Key</label>
+              <input type="password" id="cfg-claude-key" class="form-input" placeholder="sk-ant-api03-...">
+            </div>
+            <div class="form-group">
+              <label for="cfg-claude-model">Model</label>
+              <input type="text" id="cfg-claude-model" class="form-input" value="claude-3-5-haiku-20241022" placeholder="claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022">
+            </div>
+          </div>
+
+          <!-- OpenAI Panel -->
+          <div id="settings-panel-openai" class="provider-settings-panel hidden">
+            <div class="key-callout-banner openai-banner">
+              <div class="key-callout-info">
+                <div class="key-callout-badge openai-badge">🤖 OPENAI API</div>
+                <div class="key-callout-subtitle">OpenAI Platform</div>
+              </div>
+              <a href="https://platform.openai.com/api-keys" target="_blank" class="btn-highlight-cta openai-cta">
+                <span>Get OpenAI Key</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
+            <div class="form-group">
+              <label for="cfg-openai-key">OpenAI API Key</label>
+              <input type="password" id="cfg-openai-key" class="form-input" placeholder="sk-proj-...">
+            </div>
+            <div class="form-group">
+              <label for="cfg-openai-model">Model</label>
+              <input type="text" id="cfg-openai-model" class="form-input" value="gpt-4o-mini" placeholder="gpt-4o-mini, gpt-4o">
+            </div>
+          </div>
+
+          <!-- OpenRouter Panel -->
+          <div id="settings-panel-openrouter" class="provider-settings-panel hidden">
+            <div class="key-callout-banner openrouter-banner">
+              <div class="key-callout-info">
+                <div class="key-callout-badge openrouter-badge">🔀 ALL MODELS</div>
+                <div class="key-callout-subtitle">OpenRouter Console</div>
+              </div>
+              <a href="https://openrouter.ai/keys" target="_blank" class="btn-highlight-cta openrouter-cta">
+                <span>Get OpenRouter Key</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
+            <div class="form-group">
+              <label for="cfg-openrouter-key">OpenRouter API Key</label>
+              <input type="password" id="cfg-openrouter-key" class="form-input" placeholder="sk-or-v1-...">
+            </div>
+            <div class="form-group">
+              <label for="cfg-openrouter-model">Model ID</label>
+              <input type="text" id="cfg-openrouter-model" class="form-input" value="meta-llama/llama-3.3-70b-instruct" placeholder="meta-llama/llama-3.3-70b-instruct, deepseek/deepseek-r1">
+            </div>
+          </div>
+
+          <!-- Ollama Settings -->
+          <div id="settings-panel-ollama" class="provider-settings-panel">
+            <div class="panel-desc-row">
+              <span class="badge-tag">Local Private</span>
+              <span class="tag-desc">Runs on your machine</span>
+            </div>
+            <div class="form-group">
+              <label for="cfg-ollama-endpoint">Ollama Endpoint</label>
+              <input type="text" id="cfg-ollama-endpoint" class="form-input" value="http://localhost:11434">
+            </div>
+            <div class="form-group">
+              <label for="cfg-ollama-model">Model Name</label>
+              <input type="text" id="cfg-ollama-model" class="form-input" value="qwen2.5:3b" placeholder="qwen2.5:3b, llama3.2:3b, llama3.1:8b">
+            </div>
+          </div>
+
+          <!-- Gemini Nano Settings -->
+          <div id="settings-panel-gemini_nano" class="provider-settings-panel hidden">
+            <div class="nano-status-card">
+              <p>Chrome Built-in Prompt API runs directly inside Chrome without external software.</p>
+              <p class="nano-tip">Requires Chrome 128+ and <code>chrome://flags/#prompt-api-for-gemini-nano</code> enabled.</p>
+            </div>
+          </div>
+
+          <!-- LM Studio Settings -->
+          <div id="settings-panel-lm_studio" class="provider-settings-panel hidden">
+            <div class="form-group">
+              <label for="cfg-lmstudio-endpoint">Endpoint URL</label>
+              <input type="text" id="cfg-lmstudio-endpoint" class="form-input" value="http://localhost:1234">
+            </div>
+            <div class="form-group">
+              <label for="cfg-lmstudio-model">Model ID</label>
+              <input type="text" id="cfg-lmstudio-model" class="form-input" value="local-model">
+            </div>
+            <div class="form-group">
+              <label for="cfg-lmstudio-key">API Key (Optional)</label>
+              <input type="password" id="cfg-lmstudio-key" class="form-input">
+            </div>
+          </div>
+
+          <!-- Connection Test Feedback -->
+          <div class="test-row">
+            <button id="btn-test-connection" class="btn-secondary">Test Connection</button>
+            <div id="test-feedback" class="test-feedback"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
