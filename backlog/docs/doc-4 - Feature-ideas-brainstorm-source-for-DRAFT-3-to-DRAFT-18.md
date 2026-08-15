@@ -1,4 +1,18 @@
-# Backlog Ideas (requires user feedback)
+---
+id: doc-4
+title: Feature ideas brainstorm (source for DRAFT-3 to DRAFT-18)
+type: other
+created_date: '2026-08-15 11:19'
+updated_date: '2026-08-15 11:19'
+tags:
+  - ideas
+  - brainstorm
+---
+# Feng Shui for Tabs: Advanced Tab Organization Ideas
+
+A comprehensive brainstorm of innovative, personalized, and productivity-focused features for intelligent tab organization.
+
+---
 
 ## 1. Grouping Granularity (How deep is the organization?)
 Instead of a one-size-fits-all approach, users can control how specific the groups should be.
@@ -66,3 +80,39 @@ When the user clicks "Analyze", the AI generates **two distinct organization pla
 Bring order to the rest of the browser ecosystem:
 * **Bookmark Sync Organizer:** Analyzes open tabs and checks if there are matching folders in the Bookmark Bar. Offers to file open tabs directly into those bookmark folders, or archive stale tabs into a new bookmark folder called `AI Archive - [Date]`.
 * **Merged History Scanner:** Scans recently closed tabs to see if restoring any of them would fit into the active tab groups.
+
+---
+
+## 6. Smart Pruning & "Tab Bankruptcy" (Spring Cleaning)
+* **1-Click Tab Bankruptcy:** For users overwhelmed with 100+ tabs, 1-click exports an AI-generated Markdown / HTML digest with AI summaries of all tabs, saves it to bookmarks/local files, and closes the clutter.
+* **Auto-Collapse Stale Groups:** Automatically collapse groups whose tabs haven't been activated in over 2 hours to keep the tab strip slim and focused.
+* **Redundancy Detector:** Flag tabs that contain overlapping content (e.g. 3 different tabs showing identical API documentation or shopping comparisons for the same product). ⭐
+
+---
+
+## 7. Multi-Monitor Spatial Routing (Window Management)
+* **Contextual Window Separation:** Automatically distribute groups across physical windows/monitors:
+  - Window 1 (Main monitor): `Work / Code / Active Tasks`
+  - Window 2 (Side monitor): `Slack / Email / Music / References`
+* **"Zen / Focus Mode" Extraction:** Temporarily extract only the 2-3 tabs needed for a specific task into an isolated clean window, hiding everything else until focus mode ends.
+
+---
+
+## 8. Semantic Tab Search & NL Command Bar ("Ask Your Tabs") ⭐
+* **Natural Language Queries:** Instead of scanning 50 tabs manually, search: *"Where was that article about CSS subgrid?"* or *"Find the tab with the pricing comparison table."*
+* **AI Action Commands in prompt input:**
+  - *"Close all shopping tabs except the cheapest one."*
+  - *"Group everything related to my trip to Tokyo and move it to a new window."*
+  - *"Mute and collapse all video tabs."*
+
+---
+
+## 9. Session Workspace Packaging & Sharing
+* **Save & Restore Named Sessions:** Save a complete group structure as a project workspace (e.g. `Q3 Taxes`, `Home Renovation Research`) to re-open anytime in 1-click.
+* **Export Research Digest:** Generate a clean Markdown or Notion-ready summary table with key points from every open tab in a group to share with colleagues or save for later.
+
+---
+
+## 10. Proactive & Automated Feng Shui (Trigger-Based)
+* **Clutter Threshold Trigger:** Automatically notify or trigger grouping when unorganized tabs exceed a user-set threshold (e.g. `> 15 unorganized tabs`).
+* **End-of-Day Wind Down:** A 5 PM / 6 PM notification offering to archive, bookmark, or organize the day's open tabs for a clean start tomorrow.
