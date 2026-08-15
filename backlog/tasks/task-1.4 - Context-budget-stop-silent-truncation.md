@@ -4,7 +4,7 @@ title: Context budget - stop silent truncation
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:41'
+updated_date: '2026-08-15 13:26'
 labels:
   - grouping
   - ollama
@@ -32,4 +32,5 @@ _callOllama() in background/llm-adapter.js hardcodes num_ctx: 16384 (line 396). 
 - [ ] #3 The estimated payload size vs num_ctx is surfaced in the UI so overflow is visible instead of silent
 - [ ] #4 With a 250-tab session, no single call exceeds the configured num_ctx
 - [ ] #5 Exceeding the budget produces a visible message, never a silent truncation
+- [ ] #6 Ollama requests specify format: 'json' in the payload to enforce grammar-constrained structured JSON output from local models like Gemma 12B
 <!-- AC:END -->

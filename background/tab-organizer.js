@@ -19,59 +19,53 @@ const CONTRAST_PALETTE = [
 ];
 
 /**
- * Strips all emojis, TLDs, and maps synonyms to canonical <= 12 char titles.
+ * Strips emojis, control characters, and trims to <= 12 characters on a word boundary
+ * without substituting the subject chosen by the LLM.
  */
 export function cleanAndShortenTitle(rawTitle) {
   if (!rawTitle) return 'Other';
 
-  // 1. Remove emojis, symbols, and surrogate pairs
+  // 1. Remove emojis, symbols, surrogate pairs, and control characters
   let title = rawTitle
     .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '')
-    .replace(/\.(com|org|net|io|dev|app|ai|wiki|edu|gov|co|uk|de|gg)/gi, '') // strip domain TLDs
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // control chars
     .replace(/[^\w\s\-/]/g, '') // remove special punctuation
     .trim();
 
   const lower = title.toLowerCase();
+  if (!title || lower === 'other' || lower === 'misc' || lower === 'uncategorized') return 'Other';
 
-  // 2. Canonical Semantic Normalization (unifies synonyms & domains)
-  if (lower.includes('wikipedia') || lower.includes('wiki') || lower.includes('fandom') || lower.includes('gamepedia')) return 'Wiki';
-  if (lower.includes('reddit')) return 'Reddit';
-  if (lower.includes('youtube') || lower.includes('twitch') || lower.includes('video') || lower.includes('stream') || lower.includes('watch') || lower.includes('netflix')) return 'Video';
-  if (lower.includes('github') || lower.includes('gitlab') || lower.includes('code') || lower.includes('coding') || lower.includes('dev') || lower.includes('repo') || lower.includes('program')) return 'Code';
-  if (lower.includes('stackoverflow') || lower.includes('stackexchange') || lower.includes('docs') || lower.includes('documentation') || lower.includes('reference') || lower.includes('manual')) return 'Docs';
-  if (lower.includes('amazon') || lower.includes('ebay') || lower.includes('shop') || lower.includes('store') || lower.includes('product') || lower.includes('buy') || lower.includes('cart')) return 'Shop';
-  if (lower.includes('songsterr') || lower.includes('ableton') || lower.includes('music') || lower.includes('piano') || lower.includes('guitar') || lower.includes('theory') || lower.includes('audio') || lower.includes('spotify') || lower.includes('sound') || lower.includes('chords')) return 'Music';
-  if (lower.includes('game') || lower.includes('gaming') || lower.includes('steam') || lower.includes('poe') || lower.includes('quest') || lower.includes('rpg') || lower.includes('ign')) return 'Gaming';
-  if (lower.includes('news') || lower.includes('article') || lower.includes('journal') || lower.includes('post') || lower.includes('blog')) return 'News';
-  if (lower.includes('mail') || lower.includes('gmail') || lower.includes('email') || lower.includes('inbox') || lower.includes('outlook')) return 'Mail';
-  if (lower.includes('twitter') || lower.includes('facebook') || lower.includes('social') || lower.includes('instagram') || lower.includes('threads')) return 'Social';
-  if (lower.includes('search') || lower.includes('kagi') || lower.includes('google') || lower.includes('bing') || lower.includes('duckduckgo')) return 'Search';
-  if (lower.includes('travel') || lower.includes('hotel') || lower.includes('flight') || lower.includes('trip') || lower.includes('booking')) return 'Travel';
-
-  // 3. Fallback: Limit strictly to 1-2 words and at most 12 characters
-  const words = title.split(/\s+/).filter(Boolean);
-  if (words.length > 2) {
-    title = words.slice(0, 2).join(' ');
-  }
+  // 2. Truncate strictly <= 12 characters respecting word boundaries (never cut mid-word)
   if (title.length > 12) {
-    title = title.slice(0, 12).trim();
+    const words = title.split(/\s+/).filter(Boolean);
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length <= 12) {
+        current = candidate;
+      } else {
+        break;
+      }
+    }
+    // If the first word itself is longer than 12 chars, truncate it to 12 chars
+    title = current || (words[0] ? words[0].slice(0, 12).trim() : '');
   }
 
-  if (!title || lower.includes('other') || lower.includes('misc') || lower.includes('uncategorized')) return 'Other';
+  if (!title) return 'Other';
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 /**
- * Merges groups with identical or synonymous normalized titles.
+ * Merges groups with normalized-title equality (case/whitespace/punctuation-insensitive).
  */
 export function mergeDuplicateGroups(groups) {
   if (!groups || groups.length === 0) return [];
 
-  const titleMap = new Map(); // canonicalTitle -> { title, tabIds: Set, rationales: [] }
+  const titleMap = new Map(); // normalizedKey -> { title, tabIds: Set, rationales: [] }
 
   for (const group of groups) {
     const cleanTitle = cleanAndShortenTitle(group.title);
-    const key = cleanTitle.toLowerCase();
+    const key = cleanTitle.toLowerCase().replace(/[^\w]/g, '');
 
     if (!titleMap.has(key)) {
       titleMap.set(key, {

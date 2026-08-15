@@ -4,17 +4,17 @@ title: Local junk detection rules
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:49'
-updated_date: '2026-08-15 11:41'
+updated_date: '2026-08-15 13:26'
 labels:
   - cleanup
-milestone: m-1
+milestone: m-0
 dependencies: []
 modified_files:
   - shared/junk-rules.js
 parent_task_id: TASK-2
 priority: medium
 type: feature
-ordinal: 10000
+ordinal: 5500
 ---
 
 ## Description

@@ -4,13 +4,14 @@ title: Two-pass label then cluster pipeline
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:48'
-updated_date: '2026-08-15 11:42'
+updated_date: '2026-08-15 13:26'
 labels:
   - grouping
 milestone: m-0
 dependencies:
   - TASK-1.3
   - TASK-1.4
+  - TASK-2.1
 modified_files:
   - background/tab-labeler.js
   - background/service-worker.js
@@ -36,4 +37,5 @@ A single call asking a 12B model to both understand ~250 pages and design a taxo
 - [ ] #5 Pass 2 clusters only on {subject, entity, intent} and returns title (<=12 chars, pre-abbreviated by the LLM), label (full name), rationale, tabIds, color
 - [ ] #6 No single call exceeds the token budget from TASK-1.4, at 30, 120, and 250 tab counts
 - [ ] #7 label is added to JSON_SCHEMA in shared/constants.js
+- [ ] #8 Ollama requests in both pass 1 and pass 2 pass format: 'json' to ensure deterministic JSON parsing on local models like Gemma 12B
 <!-- AC:END -->
