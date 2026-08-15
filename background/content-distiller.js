@@ -20,21 +20,28 @@ function truncate(value, maxLength) {
 function compactLabelingRecord(tab) {
   const record = {
     i: tab.id,
-    t: truncate(tab.title, 140)
+    t: truncate(tab.title, 120)
   };
+  if (tab.platformContext) {
+    if (tab.platformContext.query) record.q = truncate(tab.platformContext.query, 60);
+    if (tab.platformContext.subreddit) record.r = tab.platformContext.subreddit;
+    if (tab.platformContext.repo) record.p = truncate(tab.platformContext.repo, 40);
+    if (tab.platformContext.service) record.s = truncate(tab.platformContext.service, 30);
+  }
   const location = [tab.domain, tab.path].filter(Boolean).join('');
-  if (location) record.u = truncate(location, 140);
-  if (tab.description) record.d = truncate(tab.description, 180);
-  if (tab.schemaName) record.e = truncate(tab.schemaName, 120);
-  if (tab.headings?.[0]) record.h = truncate(tab.headings[0], 120);
+  if (location && !record.q && !record.r && !record.p) record.u = truncate(location, 100);
+  if (tab.description) record.d = truncate(tab.description, 140);
+  if (tab.entityHint || tab.schemaName) record.e = truncate(tab.entityHint || tab.schemaName, 80);
+  if (tab.lede) record.c = truncate(tab.lede, 100);
+  else if (tab.headings?.[0]) record.h = truncate(tab.headings[0], 80);
   return record;
 }
 
 function compactClusteringRecord(tab) {
   const record = { i: tab.id, s: truncate(tab.subject, 100) || 'Topic' };
   if (tab.title && tab.title !== tab.subject) record.t = truncate(tab.title, 80);
-  if (tab.entity) record.e = truncate(tab.entity, 100);
-  if (tab.intent) record.n = truncate(tab.intent, 48);
+  if (tab.entity) record.e = truncate(tab.entity, 80);
+  if (tab.intent && tab.intent !== 'reference') record.n = truncate(tab.intent, 30);
   return record;
 }
 
@@ -68,7 +75,10 @@ export function distillTabsForPrompt(tabs, options = {}) {
       snippet = `${snippet.slice(0, effectiveSnippetLength)}...`;
     }
 
-    let subjectSignals;
+    const entityParts = [ext.schemaBrand, ext.schemaArtist, ext.schemaCategory, ext.schemaAbout, ext.schemaName].filter(Boolean);
+    const entityHint = entityParts.length > 0 ? entityParts.join(' · ') : undefined;
+
+    let subjectSignals = ext.platformContext || undefined;
     if (includeRichEvidence && ext.platformContext) {
       const platform = ext.platformContext;
       const filtered = {};
@@ -78,6 +88,8 @@ export function distillTabsForPrompt(tabs, options = {}) {
       if (platform.tags?.length) filtered.tags = platform.tags;
       if (platform.wiki) filtered.wiki = platform.wiki;
       if (platform.section) filtered.section = platform.section;
+      if (platform.query) filtered.query = platform.query;
+      if (platform.service) filtered.service = platform.service;
       if (Object.keys(filtered).length > 0) subjectSignals = filtered;
     }
 
@@ -87,13 +99,15 @@ export function distillTabsForPrompt(tabs, options = {}) {
       title: tab.title || 'Untitled',
       domain: hostname,
       path: pathname && pathname !== '/' ? pathname : undefined,
-      siteName: includeRichEvidence ? ext.siteName || undefined : undefined,
+      siteName: ext.siteName || undefined,
       description: ext.metaDescription || ext.ogTitle || undefined,
       schemaName: ext.schemaName || undefined,
+      entityHint,
       keywords: includeRichEvidence && ext.keywords?.length ? ext.keywords.slice(0, 8) : undefined,
       headings: headings.length ? headings : undefined,
       platformContext: subjectSignals,
       schema: includeRichEvidence ? ext.schemaType || undefined : undefined,
+      lede: ext.lede ? ext.lede.slice(0, 100) : (snippet.length > 20 ? snippet.slice(0, 100) : undefined),
       snippet: effectiveSnippetLength > 0 && snippet.length > 20 ? snippet : undefined,
       localJunk: detectJunk(tab) || undefined
     };
@@ -108,18 +122,18 @@ export function distillTabsForPrompt(tabs, options = {}) {
 
 /**
  * Builds the Pass-1 prompt for batch labeling. Fast mode uses intentionally
- * terse keys: i=id, t=title, u=URL/domain path, d=description, e=entity hint,
- * and h=heading. The result schema remains explicit and stable.
+ * terse keys: i=id, t=title, q=query, r=subreddit, p=repo, s=service, u=URL,
+ * d=description, e=entity, c=lede, and h=heading.
  */
 export function constructLabelingPrompt(batchTabs, profile = null) {
   const fast = isFastProfile(profile);
   const payload = fast ? batchTabs.map(compactLabelingRecord) : batchTabs;
   const tabJsonString = JSON.stringify(payload);
   const evidenceLegend = fast
-    ? 'Input keys: i tab ID, t title, u URL/domain path, d description, e entity hint, h heading.\n'
+    ? 'Input keys: i ID, t title, q search query, r subreddit, p repo, s service, u URL, d desc, e entity, c lede text, h heading.\n'
     : '';
 
-  return `Analyze ${batchTabs.length} browser tabs. Return one compact semantic label per input ID.\n${evidenceLegend}TABS=${tabJsonString}\n\nRules: return every input ID exactly once; subject is a 2-6 word description of what the page is about, never its website; omit entity, intent, and junkType unless they materially add information. No prose, explanations, or markdown.\nReturn only JSON: {"tabs":[{"id":123,"subject":"Air Fryer Guide"}]}`;
+  return `Analyze ${batchTabs.length} browser tabs. Return one compact semantic label per input ID.\n${evidenceLegend}TABS=${tabJsonString}\n\nRules: return every input ID exactly once; subject is a 2-6 word description of what the page is about, never its website; include entity for recognized tools, products, or artists (e.g. Google Antigravity, OpenAI Codex, Claude, The Beatles); omit intent and junkType unless relevant.\nReturn only JSON: {"tabs":[{"id":123,"subject":"Air Fryer Guide","entity":"Philips AirFryer"}]}`;
 }
 
 /**

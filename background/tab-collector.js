@@ -22,6 +22,65 @@ export function normalizeUrl(rawUrl) {
   }
 }
 
+export function extractUrlPlatformFallback(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname;
+
+    // Search Engine query
+    if (host.includes('kagi.com') || host.includes('google.') || host.includes('bing.com') ||
+        host.includes('duckduckgo.com') || host.includes('search.brave.com') || host.includes('perplexity.ai')) {
+      const q = parsed.searchParams.get('q') || parsed.searchParams.get('query') || parsed.searchParams.get('p');
+      if (q) {
+        return {
+          platform: 'Search',
+          query: decodeURIComponent(q.replace(/\+/g, ' ')).slice(0, 100)
+        };
+      }
+    }
+
+    // Reddit subreddit
+    if (host.includes('reddit.com')) {
+      const m = path.match(/^\/r\/([^/]+)/);
+      if (m) {
+        return {
+          platform: 'Reddit',
+          subreddit: `r/${m[1]}`
+        };
+      }
+    }
+
+    // GitHub repo
+    if (host.includes('github.com')) {
+      const m = path.match(/^\/([^/]+)\/([^/]+)/);
+      if (m && !['settings', 'notifications', 'explore', 'orgs'].includes(m[1])) {
+        return {
+          platform: 'GitHub',
+          repo: `${m[1]}/${m[2]}`
+        };
+      }
+    }
+
+    // Google AI Studio
+    if (host.includes('aistudio.google.com')) {
+      return { platform: 'GoogleAI', service: 'Google AI Studio' };
+    }
+
+    // OpenAI / ChatGPT
+    if (host.includes('chatgpt.com') || host.includes('openai.com')) {
+      return { platform: 'OpenAI', service: host.includes('chatgpt.com') ? 'ChatGPT' : 'OpenAI' };
+    }
+
+    // Anthropic Claude
+    if (host.includes('claude.ai') || host.includes('anthropic.com')) {
+      return { platform: 'Anthropic', service: 'Claude' };
+    }
+  } catch {}
+  return null;
+}
+
 import { isScriptableUrl, isBlockedByPrivacy } from '../shared/junk-rules.js';
 export { isScriptableUrl, isBlockedByPrivacy };
 
@@ -166,6 +225,13 @@ export async function collectAllTabs(options = {}, onProgress = null) {
         extractedData = await withTimeout(executePromise, 1200, { error: 'Extraction timed out' }, signal);
       } catch (err) {
         extractedData = { error: err.message };
+      }
+    }
+
+    if (!extractedData || !extractedData.platformContext) {
+      const urlPlatform = extractUrlPlatformFallback(tab.url);
+      if (urlPlatform) {
+        extractedData = { ...(extractedData || {}), platformContext: urlPlatform };
       }
     }
 

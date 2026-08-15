@@ -6,9 +6,11 @@
 
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS, LABELING_SYSTEM_PROMPT, PROVIDER_METADATA, PROVIDERS, estimateTokens } from '../shared/constants.js';
-import { constructLabelingPrompt } from '../background/content-distiller.js';
+import { constructLabelingPrompt, distillTabsForPrompt } from '../background/content-distiller.js';
 import { ANALYSIS_PROFILES, AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, planPass2Budget, resolveAnalysisProfile } from '../background/analysis-profile.js';
 import { labelTabsInBatches } from '../background/tab-labeler.js';
+import { extractUrlPlatformFallback } from '../background/tab-collector.js';
+import { normalizePlanGroups } from '../background/tab-organizer.js';
 import { LLMAdapter } from '../background/llm-adapter.js';
 
 function readPromptInputs(prompt) {
@@ -388,6 +390,60 @@ async function testLargeTabPass2BudgetFits() {
   assert.ok(budget.contextLimit >= 8192, 'context limit should scale appropriately');
 }
 
+async function testRichBrowserExtractionAndGlobalDedupe() {
+  // Test 1: URL fallback extraction
+  const searchFallback = extractUrlPlatformFallback('https://kagi.com/search?q=codex+getting+started');
+  assert.equal(searchFallback?.platform, 'Search');
+  assert.equal(searchFallback?.query, 'codex getting started');
+
+  const redditFallback = extractUrlPlatformFallback('https://www.reddit.com/r/musicproduction/comments/123/how_to_produce');
+  assert.equal(redditFallback?.platform, 'Reddit');
+  assert.equal(redditFallback?.subreddit, 'r/musicproduction');
+
+  const githubFallback = extractUrlPlatformFallback('https://github.com/lidge-jun/opencodex');
+  assert.equal(githubFallback?.platform, 'GitHub');
+  assert.equal(githubFallback?.repo, 'lidge-jun/opencodex');
+
+  // Test 2: Compact prompt encoding contains platform signals
+  const rawTabs = [
+    {
+      tabId: 1,
+      title: 'codex getting sdtaqrted - Kagi Search',
+      url: 'https://kagi.com/search?q=codex+getting+started',
+      extractedData: { platformContext: { platform: 'Search', query: 'codex getting started' } }
+    },
+    {
+      tabId: 2,
+      title: 'How do I make original music',
+      url: 'https://reddit.com/r/musicproduction',
+      extractedData: {
+        platformContext: { platform: 'Reddit', subreddit: 'r/musicproduction' },
+        lede: 'Tips for beginners starting in music production with Ableton'
+      }
+    }
+  ];
+
+  const distilled = distillTabsForPrompt(rawTabs, { profile: { id: 'fast' } });
+  const prompt = constructLabelingPrompt(distilled, { id: 'fast' });
+  const inputs = readPromptInputs(prompt);
+
+  assert.equal(inputs[0].q, 'codex getting started');
+  assert.equal(inputs[1].r, 'r/musicproduction');
+  assert.ok(inputs[1].c.includes('Tips for beginners'));
+
+  // Test 3: normalizePlanGroups enforces global single-group partition across groups
+  const multiGroupPlan = {
+    groups: [
+      { title: 'Codex', tabIds: [1, 2, 3] },
+      { title: 'Claude Code', tabIds: [3, 4, 5] } // Tab 3 is duplicated in second group
+    ]
+  };
+
+  const normalized = normalizePlanGroups(multiGroupPlan);
+  assert.deepEqual(normalized.groups[0].tabIds, [1, 2, 3]);
+  assert.deepEqual(normalized.groups[1].tabIds, [4, 5], 'Tab 3 must not be duplicated into second group');
+}
+
 await testAdaptivePackingAndProfiles();
 await testAutoProfileSelection();
 await testPrefilterAndCoverageRetry();
@@ -398,4 +454,5 @@ await testSmallTabSetProfileReresolutionDoesNotCrash();
 await testOllamaDefaultModelAgreementAndNoOverwrite();
 await testCompactKeyAndStringIdParsing();
 await testLargeTabPass2BudgetFits();
+await testRichBrowserExtractionAndGlobalDedupe();
 console.log('Latency profile regression checks passed');

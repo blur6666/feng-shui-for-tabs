@@ -233,6 +233,7 @@ export function normalizePlanGroups(plan, validTabIds = null) {
 
   if (!Array.isArray(rawGroups)) rawGroups = [];
 
+  const claimedTabIds = new Set();
   const normalized = rawGroups.map(group => {
     if (!group || typeof group !== 'object') return null;
     const title = group.title || group.name || group.label || 'Other';
@@ -241,7 +242,7 @@ export function normalizePlanGroups(plan, validTabIds = null) {
     const rationale = group.rationale || group.reason || '';
 
     const rawIds = group.tabIds ?? group.tabs ?? group.tab_ids ?? group.ids ?? group.i ?? [];
-    const tabIds = [];
+    const uniqueIds = [];
     if (Array.isArray(rawIds)) {
       for (const item of rawIds) {
         let id = null;
@@ -256,7 +257,10 @@ export function normalizePlanGroups(plan, validTabIds = null) {
           }
         }
         if (id !== null && (!validTabIds || validTabIds.has(id))) {
-          tabIds.push(id);
+          if (!claimedTabIds.has(id)) {
+            claimedTabIds.add(id);
+            uniqueIds.push(id);
+          }
         }
       }
     }
@@ -266,7 +270,7 @@ export function normalizePlanGroups(plan, validTabIds = null) {
       label,
       color,
       rationale,
-      tabIds: Array.from(new Set(tabIds))
+      tabIds: uniqueIds
     };
   }).filter(g => g && g.tabIds.length > 0);
 

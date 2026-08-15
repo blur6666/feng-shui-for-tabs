@@ -22,9 +22,14 @@
     const keywords = keywordsRaw ? keywordsRaw.split(',').map(k => k.trim()).filter(Boolean).slice(0, 8) : [];
     const canonical = document.querySelector('link[rel="canonical"]')?.href || null;
 
-    // 2. Schema.org JSON-LD Extraction
+    // 2. Schema.org JSON-LD Extraction (Rich Triples)
     let schemaType = null;
     let schemaName = null;
+    let schemaBrand = null;
+    let schemaArtist = null;
+    let schemaCategory = null;
+    let schemaAbout = null;
+
     try {
       const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
       for (const script of ldScripts) {
@@ -34,6 +39,10 @@
           if (item && item['@type']) {
             schemaType = Array.isArray(item['@type']) ? item['@type'].join(', ') : item['@type'];
             schemaName = item.name || item.headline || null;
+            schemaBrand = item.brand?.name || (typeof item.brand === 'string' ? item.brand : null);
+            schemaArtist = item.byArtist?.name || (typeof item.byArtist === 'string' ? item.byArtist : null);
+            schemaCategory = item.category || item.applicationCategory || null;
+            schemaAbout = item.about?.name || (typeof item.about === 'string' ? item.about : null);
             break;
           }
         }
@@ -53,21 +62,34 @@
     }
 
     // 4. Platform-Specific Context Enrichment
-    const hostname = window.location.hostname;
+    const hostname = window.location.hostname.toLowerCase();
     const pathname = window.location.pathname;
     let platformContext = null;
 
-    if (hostname.includes('github.com')) {
+    // Search Engines Query Extraction
+    if (hostname.includes('kagi.com') || hostname.includes('google.') || hostname.includes('bing.com') || 
+        hostname.includes('duckduckgo.com') || hostname.includes('search.brave.com') || hostname.includes('perplexity.ai')) {
+      const params = new URLSearchParams(window.location.search);
+      const query = params.get('q') || params.get('query') || params.get('p') || document.querySelector('input[name="q"], #searchbox')?.value?.trim();
+      if (query) {
+        platformContext = {
+          platform: 'Search',
+          query: query.slice(0, 100)
+        };
+      }
+    } else if (hostname.includes('github.com')) {
       const repoMatch = pathname.match(/^\/([^/]+)\/([^/]+)/);
       const isIssueOrPr = pathname.includes('/issues/') || pathname.includes('/pull/');
+      const repoAbout = document.querySelector('.BorderGrid-cell p.f4, .f4.my-3, [itemprop="about"]')?.innerText?.trim();
       platformContext = {
         platform: 'GitHub',
         repo: repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : null,
+        about: repoAbout ? repoAbout.slice(0, 120) : null,
         section: isIssueOrPr ? (pathname.includes('/pull/') ? 'Pull Request' : 'Issue') : 'Repository',
         labels: Array.from(document.querySelectorAll('.IssueLabel, .hx_IssueLabel')).map(l => l.innerText.trim()).slice(0, 5)
       };
     } else if (hostname.includes('youtube.com')) {
-      const channelName = document.querySelector('#channel-name, .ytd-channel-name')?.innerText?.trim();
+      const channelName = document.querySelector('#channel-name, .ytd-channel-name, ytd-channel-name')?.innerText?.trim();
       platformContext = {
         platform: 'YouTube',
         channel: channelName || null,
@@ -82,9 +104,26 @@
       };
     } else if (hostname.includes('reddit.com')) {
       const subreddit = pathname.match(/^\/r\/([^/]+)/);
+      const postLede = document.querySelector('[data-test-id="post-content"] p, shreddit-post p, .Post p, .text-neutral-content')?.innerText?.trim();
       platformContext = {
         platform: 'Reddit',
-        subreddit: subreddit ? `r/${subreddit[1]}` : null
+        subreddit: subreddit ? `r/${subreddit[1]}` : null,
+        lede: postLede ? postLede.slice(0, 140) : null
+      };
+    } else if (hostname.includes('aistudio.google.com')) {
+      platformContext = {
+        platform: 'GoogleAI',
+        service: 'Google AI Studio'
+      };
+    } else if (hostname.includes('chatgpt.com') || hostname.includes('openai.com')) {
+      platformContext = {
+        platform: 'OpenAI',
+        service: hostname.includes('chatgpt.com') ? 'ChatGPT' : 'OpenAI'
+      };
+    } else if (hostname.includes('claude.ai') || hostname.includes('anthropic.com')) {
+      platformContext = {
+        platform: 'Anthropic',
+        service: 'Claude'
       };
     } else if (hostname.includes('fandom.com') || hostname.includes('wiki') || hostname.includes('gamepedia')) {
       const parts = hostname.split('.');
@@ -94,12 +133,11 @@
       };
     }
 
-    // 5. Clean Readability Core Text Extract
-    // Extract main text while excluding navigation, footers, sidebars, forms, and scripts
+    // 5. Clean Readability Core Text Extract & First-Sentence Lede
     let readableText = '';
+    let lede = platformContext?.lede || null;
     const mainEl = document.querySelector('article, main, [role="main"], .main-content, #main-content') || document.body;
     if (mainEl) {
-      // Clone element so we don't mutate the live DOM
       const clone = mainEl.cloneNode(true);
       const ignoreSelectors = [
         'script', 'style', 'noscript', 'nav', 'header', 'footer', 
@@ -112,12 +150,15 @@
       });
 
       const rawText = clone.innerText || clone.textContent || '';
-      // Normalize whitespace
       readableText = rawText
         .replace(/\s+/g, ' ')
         .replace(/[\r\n\t]+/g, ' ')
         .trim()
-        .slice(0, 800); // 800 characters limit per tab
+        .slice(0, 800);
+
+      if (!lede && readableText.length > 20) {
+        lede = readableText.slice(0, 140);
+      }
     }
 
     return {
@@ -131,8 +172,13 @@
       canonical,
       schemaType,
       schemaName,
+      schemaBrand,
+      schemaArtist,
+      schemaCategory,
+      schemaAbout,
       headings,
       platformContext,
+      lede,
       readableText
     };
   } catch (err) {

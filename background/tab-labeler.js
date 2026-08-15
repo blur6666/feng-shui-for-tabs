@@ -211,10 +211,11 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
     for (const tab of batch) {
       const labelData = batchLabelsMap.get(tab.id);
       if (!labelData) fallbackCount++;
+      const fallbackEntity = tab.entityHint || tab.schemaName || tab.platformContext?.service || tab.platformContext?.subreddit || '';
       const resolved = labelData || {
         id: tab.id,
         subject: tab.title || tab.domain || 'Reference',
-        entity: tab.schemaName || tab.domain || '',
+        entity: fallbackEntity,
         intent: 'reference',
         junkType: null
       };
@@ -228,7 +229,7 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
           domain: tab.domain || '',
           url: tab.url || '',
           subject: resolved.subject || tab.title || 'Topic',
-          entity: resolved.entity || tab.schemaName || '',
+          entity: resolved.entity || fallbackEntity,
           intent: resolved.intent || 'reference'
         });
       }
