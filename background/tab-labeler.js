@@ -30,7 +30,24 @@ function classifyFailure(error) {
 function readLabels(result, allowedIds, target) {
   const rawList = result?.value?.tabs || (Array.isArray(result?.value) ? result.value : []);
   for (const item of rawList) {
-    if (item && allowedIds.has(item.id)) target.set(item.id, item);
+    if (!item || typeof item !== 'object') continue;
+    const rawId = item.id ?? item.i ?? item.tabId ?? item.tab_id;
+    const id = typeof rawId === 'number' && Number.isFinite(rawId)
+      ? rawId
+      : (typeof rawId === 'string' && /^\d+$/.test(rawId.trim()) ? Number(rawId.trim()) : null);
+    if (id !== null && allowedIds.has(id)) {
+      const subject = item.subject ?? item.s ?? item.title ?? item.t;
+      const entity = item.entity ?? item.e ?? item.schemaName;
+      const intent = item.intent ?? item.n;
+      const junkType = item.junkType ?? item.junk_type ?? item.j;
+      target.set(id, {
+        id,
+        subject: subject !== undefined && subject !== null ? String(subject).trim() : undefined,
+        entity: entity !== undefined && entity !== null ? String(entity).trim() : undefined,
+        intent: intent !== undefined && intent !== null ? String(intent).trim() : undefined,
+        junkType: junkType !== undefined && junkType !== null ? String(junkType).trim() : null
+      });
+    }
   }
 }
 
@@ -207,6 +224,8 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
       } else {
         allCleanLabeled.push({
           id: tab.id,
+          domain: tab.domain || '',
+          url: tab.url || '',
           subject: resolved.subject || tab.title || 'Topic',
           entity: resolved.entity || tab.schemaName || '',
           intent: resolved.intent || 'reference'

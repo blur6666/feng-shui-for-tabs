@@ -427,7 +427,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
 
                 if (!validation.valid) {
-                  plan.warning = `Note: Some groups may require review: ${validation.violations.join('; ')}`;
+                  const isSevereCollapse = validation.violations.some(v =>
+                    v.includes('collapsed') || v.includes('hallucinated') || v.includes('concentrated')
+                  );
+                  if (isSevereCollapse && labeledTabs.length >= 6) {
+                    console.warn('[ServiceWorker] Model returned degenerate grouping plan; falling back to Pass-1 topic clusters');
+                    const fallbackGroupsMap = new Map();
+                    for (const t of labeledTabs) {
+                      const key = (t.entity || t.subject || 'Reference').trim();
+                      if (!fallbackGroupsMap.has(key)) fallbackGroupsMap.set(key, []);
+                      fallbackGroupsMap.get(key).push(t.id);
+                    }
+                    plan = {
+                      summary: 'Tabs organized into semantic topic clusters.',
+                      groups: Array.from(fallbackGroupsMap.entries()).map(([title, ids]) => ({
+                        title,
+                        label: title,
+                        color: 'blue',
+                        rationale: `Grouped by semantic topic (${title})`,
+                        tabIds: ids
+                      })),
+                      warning: `Note: Grouping plan was adjusted to prevent topic collapse (${validation.violations[0]}).`
+                    };
+                  } else {
+                    plan.warning = `Note: Some groups may require review: ${validation.violations.join('; ')}`;
+                  }
                 }
               }
             } else {

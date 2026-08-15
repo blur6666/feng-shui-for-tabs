@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS, LABELING_SYSTEM_PROMPT, PROVIDER_METADATA, PROVIDERS, estimateTokens } from '../shared/constants.js';
 import { constructLabelingPrompt } from '../background/content-distiller.js';
-import { ANALYSIS_PROFILES, AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, resolveAnalysisProfile } from '../background/analysis-profile.js';
+import { ANALYSIS_PROFILES, AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, planPass2Budget, resolveAnalysisProfile } from '../background/analysis-profile.js';
 import { labelTabsInBatches } from '../background/tab-labeler.js';
 import { LLMAdapter } from '../background/llm-adapter.js';
 
@@ -344,6 +344,50 @@ async function testOllamaDefaultModelAgreementAndNoOverwrite() {
   assert.equal(mergedForExistingUser.ollama.model, 'llama3.1:8b', 'Nested settings merge must preserve an existing stored model');
 }
 
+async function testCompactKeyAndStringIdParsing() {
+  const originalGenerate = LLMAdapter.generateGroupingPlan;
+  const settings = { provider: 'ollama', ollama: { num_ctx: 32768 }, grouping: { analysisProfile: 'fast' } };
+  const profile = resolveAnalysisProfile(settings);
+
+  LLMAdapter.generateGroupingPlan = async () => {
+    return {
+      value: {
+        tabs: [
+          { i: '1', s: 'Parsed Compact Topic', e: 'Entity A' },
+          { id: 2, subject: 'Standard Topic', entity: 'Entity B' }
+        ]
+      },
+      metrics: { phase: 'pass1', elapsedMs: 1 }
+    };
+  };
+
+  try {
+    const tabs = [
+      { id: 1, title: 'Tab 1', domain: 'domain1.com' },
+      { id: 2, title: 'Tab 2', domain: 'domain2.com' }
+    ];
+    const result = await labelTabsInBatches(tabs, settings, null, { profile });
+    assert.equal(result.labeledTabs.length, 2);
+    assert.equal(result.labeledTabs[0].id, 1);
+    assert.equal(result.labeledTabs[0].subject, 'Parsed Compact Topic');
+    assert.equal(result.labeledTabs[0].domain, 'domain1.com');
+    assert.equal(result.labeledTabs[1].id, 2);
+    assert.equal(result.labeledTabs[1].subject, 'Standard Topic');
+    assert.equal(result.labeledTabs[1].domain, 'domain2.com');
+  } finally {
+    LLMAdapter.generateGroupingPlan = originalGenerate;
+  }
+}
+
+async function testLargeTabPass2BudgetFits() {
+  const settings = { ollama: { num_ctx: 32768 }, grouping: { analysisProfile: 'fast' } };
+  const profile = resolveAnalysisProfile(settings);
+  const prompt = 'x'.repeat(12000); // ~3400 tokens
+  const budget = planPass2Budget(prompt, settings, profile, 'system', 150);
+  assert.equal(budget.fits, true, '150-tab Pass 2 budget must fit within configured 32K context cap');
+  assert.ok(budget.contextLimit >= 8192, 'context limit should scale appropriately');
+}
+
 await testAdaptivePackingAndProfiles();
 await testAutoProfileSelection();
 await testPrefilterAndCoverageRetry();
@@ -352,4 +396,6 @@ await testConservativeTokenEstimate();
 await testOllamaStreamingStallControl();
 await testSmallTabSetProfileReresolutionDoesNotCrash();
 await testOllamaDefaultModelAgreementAndNoOverwrite();
+await testCompactKeyAndStringIdParsing();
+await testLargeTabPass2BudgetFits();
 console.log('Latency profile regression checks passed');

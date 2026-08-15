@@ -38,16 +38,36 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
   }
 
   const tabMap = new Map((labeledTabs || []).map(t => [t.id, t]));
+  const inputIds = new Set((labeledTabs || []).map(t => t.id));
   const seenTitles = new Map();
   const seenLabels = new Map();
+  let maxGroupSize = 0;
+  let dominantGroupTitle = '';
 
   for (let i = 0; i < plan.groups.length; i++) {
     const group = plan.groups[i];
+    if (!group || typeof group !== 'object') continue;
     const rawTitle = (group.title || '').trim().toLowerCase();
     const rawLabel = (group.label || group.title || '').trim().toLowerCase();
     const tabIds = group.tabIds || [];
 
-    // 1. Check title against known site tokens
+    // 1. Check for out-of-input / hallucinated tab IDs
+    if (inputIds.size > 0) {
+      const unknownIds = tabIds.filter(id => !inputIds.has(id));
+      if (unknownIds.length > 0) {
+        violations.push(
+          `Group "${group.title || 'Untitled'}" contains ${unknownIds.length} hallucinated tab ID(s) (${unknownIds.slice(0, 3).join(', ')}${unknownIds.length > 3 ? '...' : ''}) that were not in the input set`
+        );
+      }
+    }
+
+    const validGroupTabCount = inputIds.size > 0 ? tabIds.filter(id => inputIds.has(id)).length : tabIds.length;
+    if (validGroupTabCount > maxGroupSize) {
+      maxGroupSize = validGroupTabCount;
+      dominantGroupTitle = group.title || 'Untitled';
+    }
+
+    // 2. Check title against known site tokens
     for (const site of SITE_TOKENS) {
       if (rawTitle === site || rawTitle === site.replace(/\s+/g, '') || rawTitle.startsWith(site + ' ') || rawTitle.endsWith(' ' + site)) {
         violations.push(`Group "${group.title}" is named after website "${site}" rather than a topic`);
@@ -55,7 +75,7 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
       }
     }
 
-    // 2. Check if tabs are >80% one domain but span multiple distinct subjects
+    // 3. Check if tabs are >80% one domain but span multiple distinct subjects
     if (tabIds.length >= 3) {
       const domainCounts = new Map();
       const distinctSubjects = new Set();
@@ -78,7 +98,7 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
       }
     }
 
-    // 3. Duplicate checks
+    // 4. Duplicate checks
     const normTitle = rawTitle.replace(/[^\w]/g, '');
     const normLabel = rawLabel.replace(/[^\w]/g, '');
 
@@ -93,6 +113,13 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
     } else if (normLabel) {
       seenLabels.set(normLabel, i);
     }
+  }
+
+  // 5. Check for degenerate single-group plan or clustering collapse
+  if (inputIds.size >= 6 && plan.groups.length === 1) {
+    violations.push(`Plan collapsed all ${inputIds.size} tabs into a single group "${plan.groups[0]?.title || 'Group'}" without topic clustering`);
+  } else if (inputIds.size >= 10 && plan.groups.length < 3 && maxGroupSize / Math.max(1, inputIds.size) >= 0.85) {
+    violations.push(`Plan concentrated ${Math.round((maxGroupSize / inputIds.size) * 100)}% of tabs into single dominant group "${dominantGroupTitle}"`);
   }
 
   return {
@@ -192,7 +219,7 @@ export function granularityToMinSize(granularity) {
  * Normalizes raw LLM grouping output across dictionary formats, property name variations,
  * and string/object ID representations into clean integer tabId lists.
  */
-export function normalizePlanGroups(plan) {
+export function normalizePlanGroups(plan, validTabIds = null) {
   if (!plan) return { summary: '', groups: [], suggestedActions: [] };
   let rawGroups = plan.groups;
   if (!rawGroups && typeof plan === 'object') {
@@ -217,15 +244,19 @@ export function normalizePlanGroups(plan) {
     const tabIds = [];
     if (Array.isArray(rawIds)) {
       for (const item of rawIds) {
+        let id = null;
         if (typeof item === 'number' && Number.isFinite(item)) {
-          tabIds.push(item);
+          id = item;
         } else if (typeof item === 'string' && /^\d+$/.test(item.trim())) {
-          tabIds.push(Number(item.trim()));
+          id = Number(item.trim());
         } else if (item && typeof item === 'object') {
           const nestedId = item.id ?? item.tabId ?? item.tab_id ?? item.i;
           if (nestedId !== undefined && nestedId !== null && !isNaN(Number(nestedId))) {
-            tabIds.push(Number(nestedId));
+            id = Number(nestedId);
           }
+        }
+        if (id !== null && (!validTabIds || validTabIds.has(id))) {
+          tabIds.push(id);
         }
       }
     }
@@ -542,7 +573,8 @@ export class TabOrganizer {
    * 4. Adjacent groups have strictly alternating contrasting colors.
    */
   static reconcilePlanWithRawTabs(plan, rawTabs, granularity = 'balanced') {
-    const normalizedPlan = normalizePlanGroups(plan);
+    const validTabIds = new Set((rawTabs || []).map(t => t.tabId ?? t.id));
+    const normalizedPlan = normalizePlanGroups(plan, validTabIds);
     const minSize = granularityToMinSize(granularity);
 
     const assignedTabIds = new Set();
@@ -550,7 +582,7 @@ export class TabOrganizer {
       (g.tabIds || []).forEach(id => assignedTabIds.add(id));
     });
 
-    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
+    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId ?? t.id) && !t.pinned);
 
     if (unassignedTabs.length > 0) {
       console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);

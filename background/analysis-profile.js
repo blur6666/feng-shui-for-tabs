@@ -78,7 +78,7 @@ function configuredContextCap(settings, profile) {
   const configured = Number(settings.ollama?.num_ctx);
   const fallback = Number.isFinite(profile.contextCeiling) ? profile.contextCeiling : 32768;
   const userCap = Number.isFinite(configured) && configured > 0 ? configured : fallback;
-  return Math.min(userCap, profile.contextCeiling);
+  return Number.isFinite(profile.contextCeiling) ? Math.max(profile.contextCeiling, userCap) : userCap;
 }
 
 export function estimatePass1OutputTokens(tabCount, profile) {
@@ -89,7 +89,10 @@ export function getRequestContextBudget({ estimatedPromptTokens, outputReserve, 
   const cap = configuredContextCap(settings, profile);
   const required = Math.ceil((estimatedPromptTokens + outputReserve) * 1.12);
   const preferred = Math.max(profile.minimumContext, roundContext(required));
-  const contextLimit = profile.reuseContext ? cap : Math.min(cap, preferred);
+  const effectiveCeiling = Number.isFinite(profile.contextCeiling) ? profile.contextCeiling : cap;
+  const contextLimit = profile.reuseContext
+    ? Math.min(cap, Math.max(effectiveCeiling, preferred))
+    : Math.min(cap, preferred);
 
   return {
     configuredCap: cap,
