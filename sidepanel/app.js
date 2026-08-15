@@ -83,7 +83,8 @@ const elements = {
   panelLmStudio: document.getElementById('settings-panel-lm_studio'),
   cfgLmStudioEndpoint: document.getElementById('cfg-lmstudio-endpoint'),
   cfgLmStudioModel: document.getElementById('cfg-lmstudio-model'),
-  cfgLmStudioKey: document.getElementById('cfg-lmstudio-key')
+  cfgLmStudioKey: document.getElementById('cfg-lmstudio-key'),
+  cfgPrivacyBlocklist: document.getElementById('cfg-privacy-blocklist')
 };
 
 // Initialize Application
@@ -140,6 +141,7 @@ function updateSettingsUI() {
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
   if (elements.cfgLmStudioKey) elements.cfgLmStudioKey.value = lmStudio?.apiKey || '';
+  if (elements.cfgPrivacyBlocklist) elements.cfgPrivacyBlocklist.value = (appState.settings.privacyBlocklist || []).join('\n');
 
   updateProviderPanels(provider || '');
   updateProviderBadge(provider || '');
@@ -354,7 +356,11 @@ function collectSettingsFromModal() {
       ...appState.settings.grouping,
       scope: elements.selectScope.value,
       consolidation: elements.selectConsolidation.value
-    }
+    },
+    privacyBlocklist: (elements.cfgPrivacyBlocklist?.value || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
   };
 }
 

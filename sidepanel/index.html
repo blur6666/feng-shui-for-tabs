@@ -426,6 +426,17 @@
             </div>
           </div>
 
+          <!-- Privacy Shield Section -->
+          <div class="form-group privacy-shield-group">
+            <label for="cfg-privacy-blocklist">
+              🛡️ Privacy Shield (Ignored Domains & Patterns)
+            </label>
+            <p class="form-help-text" style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+              Matching tabs are never analyzed by AI and remain untouched in the tab strip (e.g. <code>*.bank.com</code>, <code>internal.corp</code>, <code>file://</code>).
+            </p>
+            <textarea id="cfg-privacy-blocklist" class="form-input" rows="3" placeholder="*.bank.com&#10;internal.corp&#10;file://"></textarea>
+          </div>
+
           <!-- Connection Test Feedback -->
           <div class="test-row">
             <button id="btn-test-connection" class="btn-secondary">Test Connection</button>

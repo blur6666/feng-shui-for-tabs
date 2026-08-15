@@ -7,6 +7,56 @@ import { JUNK_TYPES } from './constants.js';
 
 export { JUNK_TYPES };
 
+/**
+ * Tests whether a URL matches any rule in the privacy blocklist.
+ * Supports exact domain (bank.com), wildcard (*.bank.com), full URL prefix, and file:// scheme.
+ * @param {string} url
+ * @param {string[] | string} blocklist
+ * @returns {boolean}
+ */
+export function isBlockedByPrivacy(url, blocklist = []) {
+  if (!url) return false;
+  const rawList = Array.isArray(blocklist)
+    ? blocklist
+    : (typeof blocklist === 'string' ? blocklist.split(/[\n,]+/).map(s => s.trim()).filter(Boolean) : []);
+
+  if (rawList.length === 0) return false;
+
+  const lowerUrl = url.toLowerCase();
+  let domain = '';
+  try {
+    domain = new URL(url).hostname.toLowerCase();
+  } catch {}
+
+  for (const rawRule of rawList) {
+    const rule = rawRule.trim().toLowerCase();
+    if (!rule) continue;
+
+    // file:// check
+    if (rule === 'file://' || rule === 'file' || rule === 'file://*') {
+      if (lowerUrl.startsWith('file://')) return true;
+    }
+
+    // Wildcard prefix e.g. *.internal.com
+    if (rule.startsWith('*.')) {
+      const baseDomain = rule.slice(2);
+      if (domain === baseDomain || domain.endsWith('.' + baseDomain)) return true;
+    }
+
+    // Exact domain or subdomain match
+    if (domain && (domain === rule || domain.endsWith('.' + rule))) {
+      return true;
+    }
+
+    // Exact URL prefix match
+    if (lowerUrl.startsWith(rule)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Checks if a URL is scriptable by content scripts
 export function isScriptableUrl(url) {
   if (!url) return false;

@@ -156,6 +156,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           const tabData = await collectAllTabs({
             scope: mergedSettings.grouping?.scope || 'all_windows',
+            privacyBlocklist: mergedSettings.privacyBlocklist || [],
             extractReadability: mergedSettings.grouping?.extractReadability !== false,
             skipPinned: false
           }, (completed, total) => {

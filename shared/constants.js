@@ -146,7 +146,8 @@ export const DEFAULT_SETTINGS = {
     deduplication: true,
     extractReadability: true,
     maxTabsPerBatch: 120
-  }
+  },
+  privacyBlocklist: []
 };
 
 export const MESSAGE_TYPES = {
