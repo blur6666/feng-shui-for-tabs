@@ -100,7 +100,7 @@ export const PROVIDER_METADATA = {
 };
 
 export const DEFAULT_SETTINGS = {
-  provider: PROVIDERS.OLLAMA,
+  provider: '',
   // Cloud API Keys & Models
   gemini: {
     apiKey: '',
@@ -156,7 +156,7 @@ export const MESSAGE_TYPES = {
   GET_TABS_PREVIEW: 'GET_TABS_PREVIEW',
   CHECK_LLM_HEALTH: 'CHECK_LLM_HEALTH',
   CANCEL_ANALYSIS: 'CANCEL_ANALYSIS',
-  
+
   // Service Worker -> UI (Streaming & Status)
   ANALYSIS_PROGRESS: 'ANALYSIS_PROGRESS',
   ANALYSIS_COMPLETE: 'ANALYSIS_COMPLETE',

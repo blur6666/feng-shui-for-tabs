@@ -1,36 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tab Intelligence</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body class="theme-dark">
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
       <div class="header-brand">
         <div class="brand-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           </svg>
         </div>
         <div>
-          <h1 class="brand-title">Tab Intelligence</h1>
+          <h1 class="brand-title">Feng Shui for Tabs</h1>
           <p class="brand-subtitle">AI Tab Organizer</p>
         </div>
       </div>
 
       <div class="header-actions">
-        <button id="btn-health" class="btn-icon status-badge" title="LLM Connection Status">
-          <span class="status-dot"></span>
-          <span id="provider-label" class="provider-label">Ollama</span>
+        <button id="btn-health" class="btn-icon status-badge unconfigured"
+          title="Choose your local or remote LLM in the gear icon">
+          <span class="status-dot"></span>1.
+          <span id="provider-label" class="provider-label">First Select AI ➜ </span>
         </button>
         <button id="btn-settings" class="btn-icon" title="Settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
           </svg>
         </button>
       </div>
@@ -51,7 +59,8 @@
         <span class="stat-lbl">Duplicates</span>
       </div>
       <button id="btn-refresh-stats" class="btn-stat-refresh" title="Refresh open tab counts">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 4 23 10 17 10"></polyline>
           <polyline points="1 20 1 14 7 14"></polyline>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -79,12 +88,14 @@
       </div>
 
       <div class="instructions-field">
-        <input type="text" id="input-instructions" class="form-input" placeholder="Custom focus (e.g., separate work from shopping)...">
+        <input type="text" id="input-instructions" class="form-input"
+          placeholder="Custom focus (e.g., separate work from shopping)...">
       </div>
 
       <button id="btn-analyze" class="btn-primary">
         <span class="btn-content">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
           <span>Analyze & Group Tabs</span>
@@ -135,14 +146,16 @@
     <!-- Footer Controls (Apply & Undo) -->
     <footer id="footer-actions" class="footer-actions hidden">
       <button id="btn-undo" class="btn-secondary" title="Restore previous tab grouping">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <polyline points="1 4 1 10 7 10"></polyline>
           <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
         </svg>
         <span>Undo</span>
       </button>
       <button id="btn-apply" class="btn-success">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
         <span>Apply Groups</span>
@@ -162,14 +175,15 @@
           <div class="form-group">
             <label class="group-label" for="select-provider">AI Engine</label>
             <select id="select-provider" class="form-select">
-              <optgroup label="🌐 Fast Cloud APIs">
-                <option value="groq">⚡ Groq (Free &amp; Ultra-Fast 800 tok/s)</option>
+              <option value="" disabled selected>-- Select AI Engine --</option>
+              <optgroup label="Fast Cloud APIs">
+                <option value="groq">Groq (Free &amp; Ultra-Fast 800 tok/s)</option>
                 <option value="gemini">Google Gemini (Flash)</option>
                 <option value="claude">Anthropic Claude (Haiku/Sonnet)</option>
                 <option value="openai">OpenAI (GPT-4o mini)</option>
                 <option value="openrouter">OpenRouter (All Models)</option>
               </optgroup>
-              <optgroup label="🔒 Local AI (100% Private)">
+              <optgroup label="Local AI (100% Private)">
                 <option value="ollama">Ollama (Local Server)</option>
                 <option value="gemini_nano">Chrome Gemini Nano (On-Device)</option>
                 <option value="lm_studio">LM Studio / LocalAI</option>
@@ -186,16 +200,21 @@
               </div>
               <a href="https://console.groq.com/keys" target="_blank" class="btn-highlight-cta groq-cta">
                 <span>Get Free Groq Key</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
             </div>
             <div class="form-group">
               <label for="cfg-groq-key">Groq API Key</label>
-              <input type="password" id="cfg-groq-key" class="form-input" placeholder="gsk_...">
+              <input type="password" id="cfg-groq-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
             <div class="form-group">
               <label for="cfg-groq-model">Model</label>
-              <input type="text" id="cfg-groq-model" class="form-input" value="llama-3.3-70b-versatile" placeholder="llama-3.3-70b-versatile, llama-3.1-8b-instant">
+              <input type="text" id="cfg-groq-model" class="form-input" value="llama-3.3-70b-versatile"
+                placeholder="llama-3.3-70b-versatile, llama-3.1-8b-instant">
             </div>
           </div>
 
@@ -208,16 +227,21 @@
               </div>
               <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn-highlight-cta gemini-cta">
                 <span>Get Free Gemini Key</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
             </div>
             <div class="form-group">
               <label for="cfg-gemini-key">Gemini API Key</label>
-              <input type="password" id="cfg-gemini-key" class="form-input" placeholder="AIzaSy...">
+              <input type="password" id="cfg-gemini-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
             <div class="form-group">
               <label for="cfg-gemini-model">Model</label>
-              <input type="text" id="cfg-gemini-model" class="form-input" value="gemini-2.0-flash" placeholder="gemini-2.0-flash, gemini-1.5-flash">
+              <input type="text" id="cfg-gemini-model" class="form-input" value="gemini-2.0-flash"
+                placeholder="gemini-2.0-flash, gemini-1.5-flash">
             </div>
           </div>
 
@@ -228,18 +252,24 @@
                 <div class="key-callout-badge claude-badge">🧠 CLAUDE API</div>
                 <div class="key-callout-subtitle">Anthropic Console</div>
               </div>
-              <a href="https://console.anthropic.com/settings/keys" target="_blank" class="btn-highlight-cta claude-cta">
+              <a href="https://console.anthropic.com/settings/keys" target="_blank"
+                class="btn-highlight-cta claude-cta">
                 <span>Get Claude Key</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
             </div>
             <div class="form-group">
               <label for="cfg-claude-key">Claude API Key</label>
-              <input type="password" id="cfg-claude-key" class="form-input" placeholder="sk-ant-api03-...">
+              <input type="password" id="cfg-claude-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
             <div class="form-group">
               <label for="cfg-claude-model">Model</label>
-              <input type="text" id="cfg-claude-model" class="form-input" value="claude-3-5-haiku-20241022" placeholder="claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022">
+              <input type="text" id="cfg-claude-model" class="form-input" value="claude-3-5-haiku-20241022"
+                placeholder="claude-3-5-haiku-20241022, claude-3-5-sonnet-20241022">
             </div>
           </div>
 
@@ -252,16 +282,21 @@
               </div>
               <a href="https://platform.openai.com/api-keys" target="_blank" class="btn-highlight-cta openai-cta">
                 <span>Get OpenAI Key</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
             </div>
             <div class="form-group">
               <label for="cfg-openai-key">OpenAI API Key</label>
-              <input type="password" id="cfg-openai-key" class="form-input" placeholder="sk-proj-...">
+              <input type="password" id="cfg-openai-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
             <div class="form-group">
               <label for="cfg-openai-model">Model</label>
-              <input type="text" id="cfg-openai-model" class="form-input" value="gpt-4o-mini" placeholder="gpt-4o-mini, gpt-4o">
+              <input type="text" id="cfg-openai-model" class="form-input" value="gpt-4o-mini"
+                placeholder="gpt-4o-mini, gpt-4o">
             </div>
           </div>
 
@@ -274,24 +309,41 @@
               </div>
               <a href="https://openrouter.ai/keys" target="_blank" class="btn-highlight-cta openrouter-cta">
                 <span>Get OpenRouter Key</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
             </div>
             <div class="form-group">
               <label for="cfg-openrouter-key">OpenRouter API Key</label>
-              <input type="password" id="cfg-openrouter-key" class="form-input" placeholder="sk-or-v1-...">
+              <input type="password" id="cfg-openrouter-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
             <div class="form-group">
               <label for="cfg-openrouter-model">Model ID</label>
-              <input type="text" id="cfg-openrouter-model" class="form-input" value="meta-llama/llama-3.3-70b-instruct" placeholder="meta-llama/llama-3.3-70b-instruct, deepseek/deepseek-r1">
+              <input type="text" id="cfg-openrouter-model" class="form-input" value="meta-llama/llama-3.3-70b-instruct"
+                placeholder="meta-llama/llama-3.3-70b-instruct, deepseek/deepseek-r1">
             </div>
           </div>
 
           <!-- Ollama Settings -->
-          <div id="settings-panel-ollama" class="provider-settings-panel">
-            <div class="panel-desc-row">
-              <span class="badge-tag">Local Private</span>
-              <span class="tag-desc">Runs on your machine</span>
+          <div id="settings-panel-ollama" class="provider-settings-panel hidden">
+            <div class="local-private-banner">
+              <div class="local-private-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <div class="local-private-content">
+                <div class="local-private-headline">
+                  <span class="badge-tag-local">Local Private</span>
+                  <span class="local-private-title">100% Private</span>
+                </div>
+                <div class="local-private-desc">Data never leaves your computer</div>
+              </div>
             </div>
             <div class="form-group">
               <label for="cfg-ollama-endpoint">Ollama Endpoint</label>
@@ -299,20 +351,54 @@
             </div>
             <div class="form-group">
               <label for="cfg-ollama-model">Model Name</label>
-              <input type="text" id="cfg-ollama-model" class="form-input" value="qwen2.5:3b" placeholder="qwen2.5:3b, llama3.2:3b, llama3.1:8b">
+              <input type="text" id="cfg-ollama-model" class="form-input" value="qwen2.5:3b"
+                placeholder="qwen2.5:3b, llama3.2:3b, llama3.1:8b">
             </div>
           </div>
 
           <!-- Gemini Nano Settings -->
           <div id="settings-panel-gemini_nano" class="provider-settings-panel hidden">
+            <div class="local-private-banner">
+              <div class="local-private-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <div class="local-private-content">
+                <div class="local-private-headline">
+                  <span class="badge-tag-local">Local Private</span>
+                  <span class="local-private-title">100% Private</span>
+                </div>
+                <div class="local-private-desc">Data never leaves your computer</div>
+              </div>
+            </div>
             <div class="nano-status-card">
               <p>Chrome Built-in Prompt API runs directly inside Chrome without external software.</p>
-              <p class="nano-tip">Requires Chrome 128+ and <code>chrome://flags/#prompt-api-for-gemini-nano</code> enabled.</p>
+              <p class="nano-tip">Requires Chrome 128+ and <code>chrome://flags/#prompt-api-for-gemini-nano</code>
+                enabled.</p>
             </div>
           </div>
 
           <!-- LM Studio Settings -->
           <div id="settings-panel-lm_studio" class="provider-settings-panel hidden">
+            <div class="local-private-banner">
+              <div class="local-private-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <div class="local-private-content">
+                <div class="local-private-headline">
+                  <span class="badge-tag-local">Local Private</span>
+                  <span class="local-private-title">100% Private</span>
+                </div>
+                <div class="local-private-desc">Data never leaves your computer</div>
+              </div>
+            </div>
             <div class="form-group">
               <label for="cfg-lmstudio-endpoint">Endpoint URL</label>
               <input type="text" id="cfg-lmstudio-endpoint" class="form-input" value="http://localhost:1234">
@@ -323,7 +409,7 @@
             </div>
             <div class="form-group">
               <label for="cfg-lmstudio-key">API Key (Optional)</label>
-              <input type="password" id="cfg-lmstudio-key" class="form-input">
+              <input type="password" id="cfg-lmstudio-key" class="form-input" placeholder="<PASTE API KEY HERE>">
             </div>
           </div>
 
@@ -343,4 +429,5 @@
 
   <script type="module" src="app.js"></script>
 </body>
+
 </html>

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Tab Intelligence - Local LLM Organizer",
+  "name": "Feng Shui for Tabs",
   "version": "1.0.0",
   "description": "Deeply analyzes all open tabs across windows and intelligently organizes them into coherent tab groups using your local LLM.",
   "icons": {
@@ -10,7 +10,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Open Tab Intelligence"
+    "default_title": "Feng Shui for Tabs"
   },
   "side_panel": {
     "default_path": "sidepanel/index.html"

@@ -100,6 +100,7 @@ async function loadSettings() {
     appState.settings = { ...DEFAULT_SETTINGS, ...data.settings };
   }
   updateSettingsUI();
+  updateMainUIState();
 }
 
 // Update Settings Modal UI
@@ -107,7 +108,7 @@ function updateSettingsUI() {
   const { provider, gemini, claude, openai, openrouter, groq, ollama, lmStudio } = appState.settings;
 
   if (elements.selectProvider) {
-    elements.selectProvider.value = provider || PROVIDERS.OLLAMA;
+    elements.selectProvider.value = provider || '';
   }
 
   // Populate Cloud Inputs
@@ -134,13 +135,18 @@ function updateSettingsUI() {
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
   if (elements.cfgLmStudioKey) elements.cfgLmStudioKey.value = lmStudio?.apiKey || '';
 
-  updateProviderPanels(provider || PROVIDERS.OLLAMA);
-  updateProviderBadge(provider || PROVIDERS.OLLAMA);
+  updateProviderPanels(provider || '');
+  updateProviderBadge(provider || '');
 }
 
 function updateProviderBadge(provider) {
   const meta = PROVIDER_METADATA[provider];
-  elements.providerLabel.textContent = meta ? meta.name : provider;
+  elements.providerLabel.textContent = meta ? meta.name : (provider || 'First Select AI ➜ ');
+  if (!provider) {
+    elements.btnHealth.classList.add('unconfigured');
+  } else {
+    elements.btnHealth.classList.remove('unconfigured');
+  }
 }
 
 function updateProviderPanels(selectedProvider) {
@@ -154,8 +160,25 @@ function updateProviderPanels(selectedProvider) {
   if (elements.panelLmStudio) elements.panelLmStudio.classList.toggle('hidden', selectedProvider !== PROVIDERS.LM_STUDIO);
 }
 
+function updateMainUIState() {
+  const hasProvider = !!appState.settings.provider;
+  if (elements.selectScope) elements.selectScope.disabled = !hasProvider;
+  if (elements.selectConsolidation) elements.selectConsolidation.disabled = !hasProvider;
+  if (elements.inputInstructions) elements.inputInstructions.disabled = !hasProvider;
+  if (elements.btnAnalyze) elements.btnAnalyze.disabled = !hasProvider;
+  if (elements.btnRefreshStats) elements.btnRefreshStats.disabled = !hasProvider;
+}
+
 // Check LLM Health Status
 async function checkHealth() {
+  if (!appState.settings.provider) {
+    elements.statusDot.className = 'status-dot';
+    elements.providerLabel.textContent = 'First Select AI ➜ ';
+    elements.btnHealth.title = 'Choose your local or remote LLM in the gear icon';
+    elements.btnHealth.classList.add('unconfigured');
+    return;
+  }
+  elements.btnHealth.classList.remove('unconfigured');
   try {
     elements.statusDot.className = 'status-dot';
     const response = await chrome.runtime.sendMessage({
@@ -227,10 +250,16 @@ function setupEventListeners() {
 
   // Test Connection
   elements.btnTestConnection.addEventListener('click', async () => {
+    const testSettings = collectSettingsFromModal();
+    if (!testSettings.provider) {
+      elements.testFeedback.textContent = 'Please choose an AI Engine first.';
+      elements.testFeedback.className = 'test-feedback error';
+      return;
+    }
+
     elements.testFeedback.textContent = 'Testing connection...';
     elements.testFeedback.className = 'test-feedback';
 
-    const testSettings = collectSettingsFromModal();
     const result = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.CHECK_LLM_HEALTH,
       payload: { settings: testSettings }
@@ -248,9 +277,15 @@ function setupEventListeners() {
   // Save Settings
   elements.btnSaveSettings.addEventListener('click', async () => {
     const newSettings = collectSettingsFromModal();
+    if (!newSettings.provider) {
+      elements.testFeedback.textContent = 'Please choose an AI Engine first.';
+      elements.testFeedback.className = 'test-feedback error';
+      return;
+    }
     appState.settings = newSettings;
     await chrome.storage.local.set({ settings: newSettings });
     updateSettingsUI();
+    updateMainUIState();
     elements.settingsModal.classList.add('hidden');
     await checkHealth();
   });
@@ -266,7 +301,7 @@ function setupEventListeners() {
 }
 
 function collectSettingsFromModal() {
-  const selectedProvider = elements.selectProvider?.value || PROVIDERS.OLLAMA;
+  const selectedProvider = elements.selectProvider?.value || '';
   return {
     ...appState.settings,
     provider: selectedProvider,
@@ -349,6 +384,13 @@ function handleProgressEvent(payload) {
 // Trigger Analysis
 async function startAnalysis() {
   if (appState.isAnalyzing) return;
+
+  if (!appState.settings.provider) {
+    elements.settingsModal.classList.remove('hidden');
+    elements.testFeedback.textContent = 'Please select and configure an AI Engine first.';
+    elements.testFeedback.className = 'test-feedback error';
+    return;
+  }
 
   appState.isAnalyzing = true;
   elements.btnAnalyze.disabled = true;
@@ -497,7 +539,7 @@ function renderGroupsList(groups) {
 
     (group.tabIds || []).forEach(tabId => {
       const tabData = appState.rawTabsMap.get(tabId) || { id: tabId, title: `Tab #${tabId}`, url: '' };
-      
+
       let domain = '';
       try {
         if (tabData.url) domain = new URL(tabData.url).hostname.replace('www.', '');
@@ -507,7 +549,7 @@ function renderGroupsList(groups) {
 
       const row = document.createElement('div');
       row.className = 'tab-item-row';
-      
+
       const defaultIcon = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
       const iconUrl = tabData.favIconUrl && !tabData.favIconUrl.startsWith('chrome://') ? tabData.favIconUrl : defaultIcon;
 
