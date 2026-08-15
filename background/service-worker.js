@@ -254,7 +254,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           try {
             const { settings = DEFAULT_SETTINGS } = await chrome.storage.local.get('settings');
             const mergedSettings = mergeAnalysisSettings(settings, payload?.settings || {});
-            const profile = resolveAnalysisProfile(mergedSettings);
+            let profile = resolveAnalysisProfile(mergedSettings);
             diagnostics.profile = profile.id;
             const requestOptions = {
               ...baseRequestOptions,

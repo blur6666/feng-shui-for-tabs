@@ -159,7 +159,7 @@ function updateSettingsUI() {
 
   // Populate Local Inputs
   if (elements.cfgOllamaEndpoint) elements.cfgOllamaEndpoint.value = ollama?.endpoint || 'http://localhost:11434';
-  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'gemma4:12b';
+  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'qwen2.5:3b';
   if (elements.cfgOllamaNumCtx) elements.cfgOllamaNumCtx.value = ollama?.num_ctx || 32768;
 
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
@@ -368,7 +368,7 @@ function collectSettingsFromModal() {
     },
     ollama: {
       endpoint: elements.cfgOllamaEndpoint?.value.trim() || 'http://localhost:11434',
-      model: elements.cfgOllamaModel?.value.trim() || 'gemma4:12b',
+      model: elements.cfgOllamaModel?.value.trim() || 'qwen2.5:3b',
       num_ctx: Number(elements.cfgOllamaNumCtx?.value) || 32768,
       temperature: 0.2
     },

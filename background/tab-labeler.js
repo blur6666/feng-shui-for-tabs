@@ -4,7 +4,7 @@
  * retries missing tab IDs, and routes junk tabs directly to Suggested Actions.
  */
 
-import { LABELING_JSON_SCHEMA, LABELING_SYSTEM_PROMPT } from '../shared/constants.js';
+import { LABELING_SYSTEM_PROMPT } from '../shared/constants.js';
 import { constructLabelingPrompt } from './content-distiller.js';
 import { detectJunk } from '../shared/junk-rules.js';
 import { LLMAdapter } from './llm-adapter.js';
@@ -37,12 +37,18 @@ function readLabels(result, allowedIds, target) {
 function requestOptionsForBatch({ profile, descriptor, batchIndex, totalBatches, attempt, retryReason, runOptions }) {
   return {
     systemPrompt: LABELING_SYSTEM_PROMPT,
-    responseSchema: LABELING_JSON_SCHEMA,
+    // Plain json mode, not the strict LABELING_JSON_SCHEMA: schema-constrained
+    // decoding forces every declared field to be emitted verbatim rather than
+    // letting the model terminate early (measured 6.8x slower, doc-5). Coverage
+    // is instead protected by the prompt's explicit "every ID exactly once"
+    // instruction plus the existing missing-ID retry below.
     phase: 'pass1',
     batchIndex,
     totalBatches,
     attempt,
-    stream: false,
+    // Streaming lets the adapter refresh the inactivity deadline for every
+    // Ollama NDJSON chunk, distinguishing slow progress from a true stall.
+    stream: true,
     signal: runOptions.signal,
     timeoutMs: runOptions.timeoutMs ?? profile.requestTimeoutMs,
     stallTimeoutMs: runOptions.stallTimeoutMs ?? profile.stallTimeoutMs,

@@ -118,7 +118,7 @@ export function constructLabelingPrompt(batchTabs, profile = null) {
     ? 'Input keys: i tab ID, t title, u URL/domain path, d description, e entity hint, h heading.\n'
     : '';
 
-  return `Analyze ${batchTabs.length} browser tabs. Return one semantic label per input ID.\n${evidenceLegend}TABS=${tabJsonString}\n\nRules: subject describes what the page is about, never its website; entity is the specific product/topic when identifiable; intent is the user goal; junkType is one of ${JUNK_TYPE_LIST} or null. Return every input ID exactly once.\nReturn only JSON: {"tabs":[{"id":123,"subject":"Air Fryer Buying Guide","entity":"Air Fryer","intent":"shopping","junkType":null}]}`;
+  return `Analyze ${batchTabs.length} browser tabs. Return one compact semantic label per input ID.\n${evidenceLegend}TABS=${tabJsonString}\n\nRules: return every input ID exactly once; subject is a 2-6 word description of what the page is about, never its website; omit entity, intent, and junkType unless they materially add information. No prose, explanations, or markdown.\nReturn only JSON: {"tabs":[{"id":123,"subject":"Air Fryer Guide"}]}`;
 }
 
 /**

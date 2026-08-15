@@ -22,10 +22,11 @@ export const ANALYSIS_PROFILES = Object.freeze({
     reuseContext: true,
     maxSnippetLength: 0,
     richEvidence: false,
-    // Fifty strict JSON labels need more than a terse prose estimate; reserve
-    // enough tokens to avoid truncating the closing array/object mid-response.
+    // Plain JSON labels are compact. The dedicated base reserve protects the
+    // enclosing array/object while this per-tab allowance prevents num_predict
+    // from creating an unnecessary decode-time floor.
     pass1BaseOutputTokens: 160,
-    pass1OutputTokensPerTab: 44,
+    pass1OutputTokensPerTab: 26,
     pass2OutputTokens: 1800,
     requestTimeoutMs: 2 * 60 * 1000,
     stallTimeoutMs: 45 * 1000,
@@ -43,7 +44,7 @@ export const ANALYSIS_PROFILES = Object.freeze({
     maxSnippetLength: 220,
     richEvidence: true,
     pass1BaseOutputTokens: 160,
-    pass1OutputTokensPerTab: 44,
+    pass1OutputTokensPerTab: 26,
     pass2OutputTokens: 1600,
     requestTimeoutMs: 5 * 60 * 1000,
     stallTimeoutMs: 90 * 1000,

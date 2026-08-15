@@ -125,7 +125,7 @@ export const DEFAULT_SETTINGS = {
   // Local Provider Settings
   ollama: {
     endpoint: 'http://localhost:11434',
-    model: 'gemma4:12b',
+    model: 'qwen2.5:3b',
     num_ctx: 32768,
     temperature: 0.2
   },
@@ -182,12 +182,11 @@ export const JUNK_TYPE_LIST = JUNK_TYPES.map(type => `'${type}'`).join(', ');
 export const LABELING_SYSTEM_PROMPT = `You are an expert semantic tab analyzer.
 Your task is to analyze a batch of browser tabs and produce a concise semantic summary for each tab.
 
-For each tab, output:
-- id: integer tab ID
-- subject: concise description of WHAT THE PAGE IS ABOUT (topic, project, product, problem). NEVER use the website or domain name.
-- entity: primary named entity or product (e.g. 'Philips 5000 Air Fryer', 'Rust Compiler', 'Tokyo Hotel')
-- intent: user goal (e.g. 'research', 'troubleshooting', 'shopping', 'reference')
-- junkType: string if this is low-value/operational (one of ${JUNK_TYPE_LIST}) or null if valuable.
+For every tab, output only its integer id and a short subject describing WHAT THE
+PAGE IS ABOUT (topic, project, product, problem), never its website or domain.
+Keep subject to 2-6 words. Include entity, intent, or junkType only when they
+materially add useful information; omit them otherwise. junkType, if included,
+must be one of ${JUNK_TYPE_LIST}.
 
 Return ONLY a valid JSON object with "tabs": [ ... ].`;
 
@@ -291,10 +290,11 @@ export const JSON_SCHEMA = {
 };
 
 /**
- * Estimates token count from string content (rule of thumb: ~4 chars per token for Latin/JSON;
- * note that CJK/non-Latin scripts may have higher token density).
+ * Estimates token count from string content. JSON-heavy tab payloads measured
+ * about 10% denser than the usual four-characters-per-token heuristic, so use
+ * the conservative 3.5-character divisor when budgeting model context.
  */
 export function estimateTokens(text) {
   if (!text) return 0;
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / 3.5);
 }

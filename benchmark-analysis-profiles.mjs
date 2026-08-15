@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Reproducible local Ollama benchmark for the two-pass tab analysis pipeline.
- * Usage: node benchmark-analysis-profiles.mjs [fast|quality] [model]
- * Example: node benchmark-analysis-profiles.mjs fast qwen2.5:3b
+ * Usage: node benchmark-analysis-profiles.mjs [fast|quality] [model] [tabCount]
+ * Example: node benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
  */
 
 import { JSON_SCHEMA, SYSTEM_PROMPT } from './shared/constants.js';
@@ -13,6 +13,8 @@ import { LLMAdapter } from './background/llm-adapter.js';
 
 const profileName = process.argv[2] === 'quality' ? 'quality' : 'fast';
 const model = process.argv[3] || 'qwen2.5:3b';
+const requestedTabCount = Number(process.argv[4] || 150);
+const tabCount = Number.isInteger(requestedTabCount) && requestedTabCount > 0 ? requestedTabCount : 150;
 const settings = {
   provider: 'ollama',
   ollama: {
@@ -30,7 +32,7 @@ function metricRecorder(metrics) {
   requestMetrics.push(metrics);
 }
 
-function makeSyntheticTabs() {
+function makeSyntheticTabs(count) {
   const topics = [
     ['Air Fryer', 'shopping'], ['TypeScript', 'development'], ['Tokyo Travel', 'travel'],
     ['Home Office', 'shopping'], ['Strength Training', 'fitness'], ['Coffee Brewing', 'research'],
@@ -38,7 +40,7 @@ function makeSyntheticTabs() {
     ['Recipe Planning', 'cooking']
   ];
 
-  return Array.from({ length: 100 }, (_, index) => {
+  return Array.from({ length: count }, (_, index) => {
     const [topic, intent] = topics[index % topics.length];
     const ordinal = Math.floor(index / topics.length) + 1;
     return {
@@ -56,7 +58,7 @@ function makeSyntheticTabs() {
 }
 
 const startedAt = Date.now();
-const tabs = makeSyntheticTabs();
+const tabs = makeSyntheticTabs(tabCount);
 let warmMetrics = null;
 try {
   const warm = await LLMAdapter.warmOllama(settings, {
@@ -109,6 +111,12 @@ try {
     pass1ElapsedMs,
     pass2ElapsedMs,
     totalElapsedMs: Date.now() - startedAt,
+    pass1Coverage: (labeledTabs.length + junkActions.length) / tabs.length,
+    pass1FallbackCount: progress.reduce((total, event) => total + (event.fallbackCount || 0), 0),
+    pass1RetryBatches: progress.filter(event => event.retryCount > 0).length,
+    pass1DoneReasons: requestMetrics
+      .filter(metrics => metrics.phase === 'pass1')
+      .map(metrics => metrics.doneReason || null),
     pass1BatchEvents: progress.filter(event => event.stage === 'thinking' && event.metrics).map(event => ({
       batchIndex: event.batchIndex,
       totalBatches: event.totalBatches,

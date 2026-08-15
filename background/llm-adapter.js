@@ -152,7 +152,11 @@ function parseOllamaMetrics(record = {}) {
     promptTokensPerSecond: tokensPerSecond(record.prompt_eval_count, record.prompt_eval_duration),
     evalCount: Number.isFinite(Number(record.eval_count)) ? Number(record.eval_count) : null,
     evalDurationMs: millisecondsFromNanoseconds(record.eval_duration),
-    outputTokensPerSecond: tokensPerSecond(record.eval_count, record.eval_duration)
+    outputTokensPerSecond: tokensPerSecond(record.eval_count, record.eval_duration),
+    // done_reason='length' means the response was cut off at num_predict, which
+    // silently degrades into fallback labels downstream. Surface it so callers
+    // can observe truncation instead of inferring it from evalCount arithmetic.
+    doneReason: typeof record.done_reason === 'string' ? record.done_reason : null
   };
 }
 
@@ -509,7 +513,7 @@ export class LLMAdapter {
    */
   static async warmOllama(settings, options = {}) {
     const endpoint = settings.ollama?.endpoint || 'http://localhost:11434';
-    const model = settings.ollama?.model || 'gemma4:12b';
+    const model = settings.ollama?.model || 'qwen2.5:3b';
     const control = createRequestControl({ ...options, phase: options.phase || 'warming' });
     const startedAt = nowMs();
 
@@ -717,7 +721,7 @@ export class LLMAdapter {
    */
   static async _callOllama({ prompt, settings, options }) {
     const endpoint = settings.ollama?.endpoint || 'http://localhost:11434';
-    const model = settings.ollama?.model || 'gemma4:12b';
+    const model = settings.ollama?.model || 'qwen2.5:3b';
     const temperature = settings.ollama?.temperature ?? 0.2;
     const configuredContext = Number(settings.ollama?.num_ctx) || 32768;
     const numCtx = positiveNumber(options.numCtx, configuredContext);
