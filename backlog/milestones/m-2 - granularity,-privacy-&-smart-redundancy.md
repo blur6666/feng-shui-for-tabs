@@ -1,6 +1,6 @@
 ---
 id: m-2
-title: "Deferred until the first grouping is trustworthy"
+title: "Granularity, Privacy & Smart Redundancy"
 ---
 
 ## Description
