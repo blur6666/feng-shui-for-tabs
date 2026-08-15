@@ -114,8 +114,46 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
     }
   }
 
+  const redundancyActions = detectSemanticRedundancies(allCleanLabeled);
+
   return {
     labeledTabs: allCleanLabeled,
-    junkActions: allJunkActions
+    junkActions: allJunkActions,
+    redundancyActions
   };
+}
+
+/**
+ * Detects semantic redundancy across labeled tabs without additional LLM calls.
+ * Flags tabs that share both normalized subject and entity.
+ * @param {Array<object>} labeledTabs
+ * @returns {Array<object>} redundancyActions
+ */
+export function detectSemanticRedundancies(labeledTabs = []) {
+  const redundancyActions = [];
+  const seenMap = new Map();
+
+  for (const tab of labeledTabs) {
+    if (!tab.subject && !tab.entity) continue;
+    const normSub = (tab.subject || '').trim().toLowerCase();
+    const normEnt = (tab.entity || '').trim().toLowerCase();
+    if (!normSub && !normEnt) continue;
+
+    const key = `${normEnt}:::${normSub}`;
+
+    if (seenMap.has(key)) {
+      const originalTabId = seenMap.get(key);
+      redundancyActions.push({
+        action: 'semantic_redundancy',
+        tabId: tab.id,
+        targetTabId: originalTabId,
+        junkType: 'redundant',
+        reason: `Redundant content: "${tab.subject || tab.entity}" (matches Tab #${originalTabId})`
+      });
+    } else {
+      seenMap.set(key, tab.id);
+    }
+  }
+
+  return redundancyActions;
 }

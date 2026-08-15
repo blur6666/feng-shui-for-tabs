@@ -180,7 +180,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const distilled = distillTabsForPrompt(tabData.tabs, { maxSnippetLength: 220 });
 
           // Step 3: Pass 1 - Batched Semantic Labeling
-          const { labeledTabs, junkActions } = await labelTabsInBatches(
+          const { labeledTabs, junkActions, redundancyActions } = await labelTabsInBatches(
             distilled,
             mergedSettings,
             (progress) => {
@@ -252,10 +252,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Step 5: Reconcile and guarantee 100% tab grouping coverage
           const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs);
 
-          // Merge suggested actions: junk tabs and duplicates (deduplicated by tabId)
+          // Merge suggested actions: junk tabs, duplicates, and semantic redundancies (deduplicated by tabId)
           const combinedActions = [
             ...(completePlan.suggestedActions || []),
             ...(junkActions || []),
+            ...(redundancyActions || []),
             ...(tabData.duplicateActions || [])
           ];
           const seenActionTabs = new Set();

@@ -470,6 +470,7 @@ function escapeHtml(str) {
 function categorizeActions(actions) {
   const buckets = {
     duplicates: { label: 'Duplicates', icon: '👯', items: [] },
+    redundant: { label: 'Redundant Topics', icon: '🔄', items: [] },
     new_tabs: { label: 'New Tabs', icon: '📄', items: [] },
     auth: { label: 'Auth & Thank-you', icon: '🔒', items: [] },
     errors: { label: 'Errors', icon: '⚠️', items: [] },
@@ -481,8 +482,10 @@ function categorizeActions(actions) {
     const junkType = (act.junkType || '').toLowerCase();
     const reason = (act.reason || act.title || '').toLowerCase();
 
-    if (actType === 'close_duplicate' || junkType === 'duplicate' || reason.includes('duplicate')) {
+    if (actType === 'close_duplicate' || junkType === 'duplicate' || (reason.includes('duplicate') && !reason.includes('redundant'))) {
       buckets.duplicates.items.push(act);
+    } else if (actType === 'semantic_redundancy' || junkType === 'redundant' || reason.includes('redundant')) {
+      buckets.redundant.items.push(act);
     } else if (junkType === 'new_tab' || reason.includes('new tab') || reason.includes('chrome://newtab')) {
       buckets.new_tabs.items.push(act);
     } else if (junkType === 'auth_or_transactional' || junkType === 'auth' || reason.includes('login') || reason.includes('oauth') || reason.includes('thank') || reason.includes('confirm') || reason.includes('auth')) {
