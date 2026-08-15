@@ -281,7 +281,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Apply Tab Groups Plan
         case MESSAGE_TYPES.APPLY_GROUPS: {
           const { plan, options } = payload;
-          const result = await TabOrganizer.applyGroupingPlan(plan, options);
+          const applyOptions = {
+            ...(options || {}),
+            granularity: options?.granularity || payload?.granularity || plan?.granularity || 'balanced'
+          };
+          const result = await TabOrganizer.applyGroupingPlan(plan, applyOptions);
           sendResponse(result);
           break;
         }

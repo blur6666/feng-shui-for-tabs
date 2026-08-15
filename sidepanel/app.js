@@ -794,11 +794,14 @@ async function applyTabGroups() {
 
   try {
     const consolidation = elements.selectConsolidation.value;
+    // Forward the granularity the plan was built with so Apply enforces the previewed min group size
+    const granularity = appState.plan.granularity
+      || (elements.selectGranularity ? elements.selectGranularity.value : 'balanced');
     const response = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.APPLY_GROUPS,
       payload: {
         plan: appState.plan,
-        options: { consolidation, closeDuplicates: false }
+        options: { consolidation, closeDuplicates: false, granularity }
       }
     });
 

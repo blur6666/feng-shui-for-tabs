@@ -296,12 +296,16 @@ export class TabOrganizer {
    */
   static async applyGroupingPlan(plan, options = {}) {
     const { consolidation = 'in_place' } = options;
+    // Honor the granularity the preview was reconciled with so Apply cannot re-merge
+    // 2-tab Broad/Detailed groups back to the Balanced 3-tab minimum.
+    const granularity = options.granularity || plan?.granularity || 'balanced';
+    const minSize = granularityToMinSize(granularity);
 
     // 1. Take Snapshot first
     await this.captureSnapshot();
 
-    // 2. Filter, deduplicate titles, consolidate small groups (>2 tabs) & alternate colors
-    let groups = consolidateSmallGroups(plan.groups || [], 3);
+    // 2. Filter, deduplicate titles, consolidate small groups (granularity min size) & alternate colors
+    let groups = consolidateSmallGroups(plan.groups || [], minSize);
     applyAlternatingColors(groups);
 
     const results = [];
@@ -493,6 +497,9 @@ export class TabOrganizer {
 
     // Step 3: Enforce strictly alternating colors across all groups
     applyAlternatingColors(plan.groups);
+
+    // Step 4: Persist the granularity on the plan so the Apply path enforces the same min size
+    plan.granularity = granularity;
 
     return plan;
   }
