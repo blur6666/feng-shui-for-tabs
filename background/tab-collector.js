@@ -22,22 +22,8 @@ export function normalizeUrl(rawUrl) {
   }
 }
 
-// Checks if tab URL is scriptable
-export function isScriptableUrl(url) {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  return (
-    (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('file:///')) &&
-    !lower.startsWith('chrome://') &&
-    !lower.startsWith('chrome-extension://') &&
-    !lower.startsWith('edge://') &&
-    !lower.startsWith('about:') &&
-    !lower.startsWith('devtools://') &&
-    !lower.startsWith('view-source:') &&
-    !lower.startsWith('https://chromewebstore.google.com') &&
-    !lower.startsWith('https://chrome.google.com/webstore')
-  );
-}
+// Re-export isScriptableUrl from shared junk-rules
+export { isScriptableUrl } from '../shared/junk-rules.js';
 
 // Timeout wrapper so no single tab script can ever hang the collection
 function withTimeout(promise, ms, fallbackValue = null) {
