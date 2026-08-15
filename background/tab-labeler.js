@@ -123,9 +123,26 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
   };
 }
 
+// Subjects too generic to imply redundancy when no entity is present.
+const GENERIC_SUBJECTS = new Set(['reference', 'home', 'login', 'sign in', 'signin', 'new tab', 'untitled', 'about']);
+
+const MIN_EMPTY_ENTITY_SUBJECT_LENGTH = 12;
+
+/**
+ * Normalizes a label for near-match comparison (trim, lowercase, singular form).
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeLabel(value) {
+  const normalized = (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized.length > 1 && normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
+}
+
 /**
  * Detects semantic redundancy across labeled tabs without additional LLM calls.
- * Flags tabs that share both normalized subject and entity.
+ * Flags tabs that share the same entity and near-identical subjects, plus
+ * specific subject-only matches when the entity is empty but the subject is
+ * specific enough to avoid generic false positives.
  * @param {Array<object>} labeledTabs
  * @returns {Array<object>} redundancyActions
  */
@@ -134,24 +151,42 @@ export function detectSemanticRedundancies(labeledTabs = []) {
   const seenMap = new Map();
 
   for (const tab of labeledTabs) {
-    if (!tab.subject && !tab.entity) continue;
-    const normSub = (tab.subject || '').trim().toLowerCase();
-    const normEnt = (tab.entity || '').trim().toLowerCase();
+    const normSub = normalizeLabel(tab.subject);
+    const normEnt = normalizeLabel(tab.entity);
     if (!normSub && !normEnt) continue;
 
-    const key = `${normEnt}:::${normSub}`;
+    let isRedundant = false;
+    let matchedTabId = null;
+    let matchKey = null;
 
-    if (seenMap.has(key)) {
-      const originalTabId = seenMap.get(key);
+    if (normEnt) {
+      // Entity present: subject near-match + exact entity is strong signal.
+      matchKey = `ent:${normEnt}:::sub:${normSub}`;
+      if (seenMap.has(matchKey)) {
+        isRedundant = true;
+        matchedTabId = seenMap.get(matchKey);
+      }
+    } else {
+      // Empty entity: only flag specific subjects, never generic fallbacks.
+      if (normSub.length >= MIN_EMPTY_ENTITY_SUBJECT_LENGTH && !GENERIC_SUBJECTS.has(normSub)) {
+        matchKey = `sub:${normSub}`;
+        if (seenMap.has(matchKey)) {
+          isRedundant = true;
+          matchedTabId = seenMap.get(matchKey);
+        }
+      }
+    }
+
+    if (isRedundant && matchedTabId !== null && matchKey !== null) {
       redundancyActions.push({
         action: 'semantic_redundancy',
         tabId: tab.id,
-        targetTabId: originalTabId,
+        targetTabId: matchedTabId,
         junkType: 'redundant',
-        reason: `Redundant content: "${tab.subject || tab.entity}" (matches Tab #${originalTabId})`
+        reason: `Redundant content: "${tab.subject || tab.entity}" (matches Tab #${matchedTabId})`
       });
-    } else {
-      seenMap.set(key, tab.id);
+    } else if (matchKey !== null) {
+      seenMap.set(matchKey, tab.id);
     }
   }
 

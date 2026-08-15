@@ -48,9 +48,12 @@ export function isBlockedByPrivacy(url, blocklist = []) {
       return true;
     }
 
-    // Exact URL prefix match
-    if (lowerUrl.startsWith(rule)) {
-      return true;
+    // URL prefix match: only for rules that look like scheme+host or contain a path
+    // separator. Bare tokens ('test', 'http') must not block unrelated URLs.
+    if (/^[a-z][a-z0-9+.-]*:\/\//.test(rule) || rule.includes('/')) {
+      if (lowerUrl.startsWith(rule)) {
+        return true;
+      }
     }
   }
 

@@ -1,9 +1,11 @@
 ---
 id: TASK-10
 title: Thread granularity minSize into deterministic reconciliation
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@agent'
 created_date: '2026-08-15 15:04'
+updated_date: '2026-08-15 15:10'
 labels:
   - review
   - grouping
@@ -24,8 +26,26 @@ PR #3 review: granularity currently only steers the Pass 2 prompt, but consolida
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Selected granularity reaches reconcilePlanWithRawTabs/consolidateSmallGroups instead of a hardcoded 3
-- [ ] #2 Broad and Detailed produce 2-tab groups when the LLM plan yields them; Balanced keeps the 3-tab minimum
-- [ ] #3 Prompt group-count targets and the deterministic min-size use the same granularity source
-- [ ] #4 Automated test verifies min-size selection for broad/balanced/detailed
+- [x] #1 Selected granularity reaches reconcilePlanWithRawTabs/consolidateSmallGroups instead of a hardcoded 3
+- [x] #2 Broad and Detailed produce 2-tab groups when the LLM plan yields them; Balanced keeps the 3-tab minimum
+- [x] #3 Prompt group-count targets and the deterministic min-size use the same granularity source
+- [x] #4 Automated test verifies min-size selection for broad/balanced/detailed
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. 2. Thread granularity through reconcilePlanWithRawTabs and consolidateSmallGroups
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Added granularityToMinSize (broad/detailed=2, balanced=3), threaded granularity through reconcilePlanWithRawTabs(plan, tabs, granularity) and into consolidateSmallGroups, and passed payload granularity from service-worker. Verified with automated tests: mapping, 2-tab broad groups preserved, balanced collapse.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Threaded granularity minSize into deterministic reconciliation so broad/detailed can yield 2-tab groups.
+<!-- SECTION:FINAL_SUMMARY:END -->

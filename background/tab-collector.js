@@ -88,11 +88,15 @@ export async function collectAllTabs(options = {}, onProgress = null) {
 
   // Flatten tabs with window context (excluding privacy-shielded tabs)
   const rawTabs = [];
+  let shieldedTabs = 0;
   for (const win of windows) {
     if (win.type !== 'normal') continue;
     for (const tab of win.tabs || []) {
       if (skipPinned && tab.pinned) continue;
-      if (isBlockedByPrivacy(tab.url, privacyBlocklist)) continue;
+      if (isBlockedByPrivacy(tab.url, privacyBlocklist)) {
+        shieldedTabs++;
+        continue;
+      }
       rawTabs.push({
         ...tab,
         windowFocused: win.focused
@@ -171,6 +175,7 @@ export async function collectAllTabs(options = {}, onProgress = null) {
     windows: windows.map(w => ({ id: w.id, focused: w.focused, tabCount: w.tabs?.length || 0 })),
     tabs: tabRecords,
     duplicateActions,
-    totalTabs
+    totalTabs,
+    shieldedTabs
   };
 }

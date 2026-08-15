@@ -444,8 +444,11 @@ async function startAnalysis() {
     appState.rawTabsMap.clear();
     (response.rawTabs || []).forEach(t => appState.rawTabsMap.set(t.tabId, t));
 
-    appState.plan = response.plan;
-    renderResults(response.plan);
+    appState.plan = {
+      ...(response.plan || {}),
+      shieldedTabs: response.shieldedTabs || 0
+    };
+    renderResults(appState.plan);
   } catch (err) {
     alert(`Analysis Failed: ${err.message}`);
   } finally {
@@ -517,6 +520,18 @@ function renderResults(plan) {
     warnEl.className = 'results-warning-banner';
     warnEl.innerHTML = `<span>⚠️ ${escapeHtml(plan.warning)}</span>`;
     elements.resultsSummary.parentNode.insertBefore(warnEl, elements.resultsSummary.nextSibling);
+  }
+
+  // Render Privacy Shield notice (Feedback: shielded tabs were dropped silently)
+  const existingShield = elements.resultsContainer.querySelector('.privacy-shield-banner');
+  if (existingShield) existingShield.remove();
+
+  const shieldedCount = Number(plan.shieldedTabs) || 0;
+  if (shieldedCount > 0) {
+    const shieldEl = document.createElement('div');
+    shieldEl.className = 'privacy-shield-banner';
+    shieldEl.innerHTML = `<span>🛡️ ${shieldedCount} tab${shieldedCount === 1 ? '' : 's'} protected by Privacy Shield</span>`;
+    elements.resultsSummary.parentNode.insertBefore(shieldEl, elements.resultsSummary.nextSibling);
   }
 
   // 2. Suggested Actions Buckets (Duplicates, New Tabs, Auth, Errors)

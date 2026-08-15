@@ -250,7 +250,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           // Step 5: Reconcile and guarantee 100% tab grouping coverage
-          const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs);
+          const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs, payload?.granularity || 'balanced');
 
           // Merge suggested actions: junk tabs, duplicates, and semantic redundancies (deduplicated by tabId)
           const combinedActions = [
@@ -272,7 +272,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             success: true,
             plan: completePlan,
             rawTabs: tabData.tabs,
-            totalTabs: tabData.totalTabs
+            totalTabs: tabData.totalTabs,
+            shieldedTabs: tabData.shieldedTabs || 0
           });
           break;
         }
