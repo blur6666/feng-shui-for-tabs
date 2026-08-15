@@ -77,7 +77,7 @@ const savedSettings = [];
 const storedSettings = {
   provider: 'ollama',
   ollama: { endpoint: 'http://test', model: 'test', num_ctx: 32768 },
-  grouping: { scope: 'all_windows', consolidation: 'in_place', analysisProfile: 'fast' },
+  grouping: { scope: 'all_windows', consolidation: 'in_place', analysisProfile: 'auto' },
   privacyBlocklist: []
 };
 
@@ -104,20 +104,21 @@ globalThis.chrome = {
 await import('./sidepanel/app.js');
 await documentListeners.DOMContentLoaded();
 
-const profile = elements.get('select-analysis-profile');
-profile.value = 'quality';
-await profile.listeners.change[0]({ target: profile });
-assert.equal(savedSettings.at(-1).settings.grouping.analysisProfile, 'quality');
+// No profile selector should exist anywhere in the DOM elements cache.
+assert.equal(elements.has('select-analysis-profile'), false, 'profile selector must not exist');
+assert.equal(elements.has('analysis-profile-hint'), false, 'profile hint must not exist');
 
+// A plain analyze run must not inject a forced profile into the payload.
 const running = elements.get('btn-analyze').listeners.click[0]();
 await new Promise(resolve => setTimeout(resolve, 0));
-assert.equal(messages.at(-1).type, 'ANALYZE_TABS');
-assert.equal(messages.at(-1).payload.settings.grouping.analysisProfile, 'quality');
+const analyzeMessage = messages.find(message => message.type === 'ANALYZE_TABS');
+assert.ok(analyzeMessage, 'ANALYZE_TABS message sent');
+assert.equal(analyzeMessage.payload.settings.grouping.analysisProfile, 'auto');
 
 progressListener({
   type: 'ANALYSIS_PROGRESS',
   payload: {
-    analysisId: 'run-1', stage: 'thinking', profile: 'quality', batchIndex: 1,
+    analysisId: 'run-1', stage: 'thinking', profile: 'fast', batchIndex: 1,
     totalBatches: 2, completed: 25, total: 50, retryCount: 1, retryReason: 'coverage',
     message: 'Completed a batch'
   }
@@ -137,11 +138,11 @@ resolveAnalysis({
   success: false,
   cancelled: true,
   analysisId: 'run-1',
-  diagnostics: { profile: 'quality', elapsedMs: 1200, collectionMs: 100, requestCount: 2, retryCount: 1, requests: [] }
+  diagnostics: { profile: 'fast', elapsedMs: 1200, collectionMs: 100, requestCount: 2, retryCount: 1, requests: [] }
 });
 await running;
 assert.equal(elements.get('analysis-diagnostics-card').classList.contains('hidden'), false);
 assert.match(elements.get('analysis-diagnostics').textContent, /Status: Cancelled/);
 assert.match(elements.get('progress-message').textContent, /No tab changes were applied/);
 
-console.log('Sidepanel profile, progress, throttling, cancellation, and diagnostics checks passed');
+console.log('Sidepanel progress, throttling, cancellation, diagnostics, and no-selector checks passed');

@@ -35,8 +35,6 @@ const elements = {
   selectGranularity: document.getElementById('select-granularity'),
   selectScope: document.getElementById('select-scope'),
   selectConsolidation: document.getElementById('select-consolidation'),
-  selectAnalysisProfile: document.getElementById('select-analysis-profile'),
-  analysisProfileHint: document.getElementById('analysis-profile-hint'),
   inputInstructions: document.getElementById('input-instructions'),
   btnAnalyze: document.getElementById('btn-analyze'),
   progressCard: document.getElementById('progress-card'),
@@ -163,10 +161,6 @@ function updateSettingsUI() {
   if (elements.cfgOllamaEndpoint) elements.cfgOllamaEndpoint.value = ollama?.endpoint || 'http://localhost:11434';
   if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'gemma4:12b';
   if (elements.cfgOllamaNumCtx) elements.cfgOllamaNumCtx.value = ollama?.num_ctx || 32768;
-  if (elements.selectAnalysisProfile) {
-    elements.selectAnalysisProfile.value = appState.settings.grouping?.analysisProfile || 'fast';
-  }
-  updateAnalysisProfileHint(appState.settings.grouping?.analysisProfile || 'fast');
 
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
@@ -175,13 +169,6 @@ function updateSettingsUI() {
 
   updateProviderPanels(provider || '');
   updateProviderBadge(provider || '');
-}
-
-function updateAnalysisProfileHint(profile) {
-  if (!elements.analysisProfileHint) return;
-  elements.analysisProfileHint.textContent = profile === 'quality'
-    ? 'Quality keeps richer evidence and one corrective grouping retry. It may take longer on local models.'
-    : 'Fast uses compact adaptive batches, a smaller effective context, and no full-plan correction retry. Your model is never changed automatically.';
 }
 
 function updateProviderBadge(provider) {
@@ -210,7 +197,6 @@ function updateMainUIState() {
   if (elements.selectGranularity) elements.selectGranularity.disabled = !hasProvider;
   if (elements.selectScope) elements.selectScope.disabled = !hasProvider;
   if (elements.selectConsolidation) elements.selectConsolidation.disabled = !hasProvider;
-  if (elements.selectAnalysisProfile) elements.selectAnalysisProfile.disabled = !hasProvider;
   if (elements.inputInstructions) elements.inputInstructions.disabled = !hasProvider;
   if (elements.btnAnalyze) elements.btnAnalyze.disabled = !hasProvider;
   if (elements.btnRefreshStats) elements.btnRefreshStats.disabled = !hasProvider;
@@ -292,20 +278,6 @@ function setupEventListeners() {
   if (elements.selectGranularity) {
     elements.selectGranularity.addEventListener('change', (e) => {
       chrome.storage.local.set({ granularity: e.target.value });
-    });
-  }
-
-  // Processing profile is intentionally a main-screen setting so users can
-  // choose latency versus richer validation without changing their provider.
-  if (elements.selectAnalysisProfile) {
-    elements.selectAnalysisProfile.addEventListener('change', async event => {
-      const analysisProfile = event.target.value === 'quality' ? 'quality' : 'fast';
-      appState.settings = {
-        ...appState.settings,
-        grouping: { ...appState.settings.grouping, analysisProfile }
-      };
-      updateAnalysisProfileHint(analysisProfile);
-      await chrome.storage.local.set({ settings: appState.settings });
     });
   }
 
@@ -591,14 +563,12 @@ async function startAnalysis() {
   let terminalOutcome = 'Completed';
   try {
     const customInstructions = elements.inputInstructions.value.trim();
-    const analysisProfile = elements.selectAnalysisProfile?.value === 'quality' ? 'quality' : 'fast';
     const settings = {
       ...appState.settings,
       grouping: {
         ...appState.settings.grouping,
         scope: elements.selectScope.value,
-        consolidation: elements.selectConsolidation.value,
-        analysisProfile
+        consolidation: elements.selectConsolidation.value
       }
     };
 

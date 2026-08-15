@@ -68,14 +68,14 @@ A Manifest V3 Chrome Extension that harvests maximum semantic data from all open
 
 ## ⚡ Fast and Quality processing profiles
 
-The side panel has a **Processing Profile** selector. It is saved with your extension settings and does **not** switch models, pull models, use a cloud fallback, or increase Ollama concurrency.
+The extension selects the processing profile **automatically** from the number of open tabs — there is no selector in the side panel. Small tab sets (20 tabs or fewer) use the richer Quality profile, and larger sets use the Fast profile so latency stays bounded. The choice never switches models, pulls models, uses a cloud fallback, or increases Ollama concurrency.
 
-| Profile | Best for | What it does |
+| Profile | Used when | What it does |
 | --- | --- | --- |
-| **Fast** (default) | Large tab sets and responsive local use | Locally routes known operational tabs before inference, sends compact evidence, token-packs up to 50 tabs per Pass-1 request, caps the effective Ollama context at 8K, bounds output, and skips a second full Pass-2 correction request. |
-| **Quality** | Smaller tab sets where richer page evidence matters | Retains headings, keywords, platform context, and readability snippets; uses conservative 20-tab batches; and retains the validation/correction retry when the final grouping violates guardrails. |
+| **Fast** | More than 20 tabs | Locally routes known operational tabs before inference, sends compact evidence, token-packs up to 50 tabs per Pass-1 request, caps the effective Ollama context at 8K, bounds output, and skips a second full Pass-2 correction request. |
+| **Quality** | 20 tabs or fewer | Retains headings, keywords, platform context, and readability snippets; uses conservative 20-tab batches; and retains the validation/correction retry when the final grouping violates guardrails. |
 
-Both profiles keep semantic two-pass grouping: Pass 1 labels each tab's subject/entity/intent, then Pass 2 forms Chrome tab groups. They keep one Ollama generation in flight by default because extra concurrency can increase KV-cache pressure and make local inference slower.
+Both profiles keep semantic two-pass grouping: Pass 1 labels each tab's subject/entity/intent, then Pass 2 forms Chrome tab groups. They keep one Ollama generation in flight by default because extra concurrency can increase KV-cache pressure and make local inference slower. Advanced users can pin a specific profile by setting `grouping.analysisProfile` to `fast` or `quality` in stored settings; the default `auto` chooses by tab count.
 
 ### Choosing a local model and context
 

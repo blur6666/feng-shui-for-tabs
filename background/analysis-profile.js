@@ -53,9 +53,20 @@ export const ANALYSIS_PROFILES = Object.freeze({
   })
 });
 
-export function resolveAnalysisProfile(settings = {}) {
+/**
+ * Auto mode: Quality is affordable (single 20-tab batch) for small tab sets
+ * and gives richer evidence; larger sets switch to Fast for bounded latency.
+ */
+export const AUTO_QUALITY_MAX_TABS = 20;
+
+export function resolveAnalysisProfile(settings = {}, tabCount = 0) {
   const requested = settings.grouping?.analysisProfile;
-  return ANALYSIS_PROFILES[requested] || ANALYSIS_PROFILES.fast;
+  if (requested === 'quality') return ANALYSIS_PROFILES.quality;
+  if (requested === 'fast') return ANALYSIS_PROFILES.fast;
+  // auto / missing / legacy values: choose by tab count without user input.
+  return tabCount > 0 && tabCount <= AUTO_QUALITY_MAX_TABS
+    ? ANALYSIS_PROFILES.quality
+    : ANALYSIS_PROFILES.fast;
 }
 
 function roundContext(value) {

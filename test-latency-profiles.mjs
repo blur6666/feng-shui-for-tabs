@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { LABELING_JSON_SCHEMA, LABELING_SYSTEM_PROMPT } from './shared/constants.js';
 import { constructLabelingPrompt } from './background/content-distiller.js';
-import { getRequestContextBudget, planAdaptivePass1Batches, resolveAnalysisProfile } from './background/analysis-profile.js';
+import { AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, resolveAnalysisProfile } from './background/analysis-profile.js';
 import { labelTabsInBatches } from './background/tab-labeler.js';
 import { LLMAdapter } from './background/llm-adapter.js';
 
@@ -53,6 +53,24 @@ async function testAdaptivePackingAndProfiles() {
   const qualityBudget = getRequestContextBudget({ estimatedPromptTokens: 12000, outputReserve: 2000, settings: qualitySettings, profile: quality });
   assert.ok(fastBudget.contextLimit <= 8192);
   assert.ok(qualityBudget.contextLimit > 8192);
+}
+
+async function testAutoProfileSelection() {
+  const autoSettings = { grouping: { analysisProfile: 'auto' } };
+  const storedFastSettings = { grouping: { analysisProfile: 'fast' } };
+  const storedQualitySettings = { grouping: { analysisProfile: 'quality' } };
+
+  // Auto: small sets -> Quality, large sets -> Fast
+  assert.equal(resolveAnalysisProfile(autoSettings, 10).id, 'quality');
+  assert.equal(resolveAnalysisProfile(autoSettings, AUTO_QUALITY_MAX_TABS).id, 'quality');
+  assert.equal(resolveAnalysisProfile(autoSettings, AUTO_QUALITY_MAX_TABS + 1).id, 'fast');
+  assert.equal(resolveAnalysisProfile(autoSettings, 112).id, 'fast');
+  // No tab count yet -> Fast (safe default)
+  assert.equal(resolveAnalysisProfile(autoSettings).id, 'fast');
+
+  // Stored explicit values are always honored
+  assert.equal(resolveAnalysisProfile(storedFastSettings, 10).id, 'fast');
+  assert.equal(resolveAnalysisProfile(storedQualitySettings, 112).id, 'quality');
 }
 
 async function testPrefilterAndCoverageRetry() {
@@ -127,6 +145,7 @@ async function testOllamaRequestBounds() {
 }
 
 await testAdaptivePackingAndProfiles();
+await testAutoProfileSelection();
 await testPrefilterAndCoverageRetry();
 await testOllamaRequestBounds();
 console.log('Latency profile regression checks passed');

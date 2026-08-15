@@ -142,7 +142,7 @@ export const DEFAULT_SETTINGS = {
   grouping: {
     scope: 'all_windows', // 'all_windows' | 'current_window'
     consolidation: 'in_place', // 'in_place' | 'consolidate_windows'
-    analysisProfile: 'fast', // 'fast' | 'quality'
+    analysisProfile: 'auto', // 'auto' | 'fast' | 'quality'
     targetGroupCount: 'auto',
     deduplication: true,
     extractReadability: true

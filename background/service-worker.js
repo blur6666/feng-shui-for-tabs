@@ -301,6 +301,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               break;
             }
 
+            // Auto mode: choose the profile from the authoritative tab count
+            // once collection is done. The pre-collection profile only sized
+            // the concurrent warm-up request.
+            const resolvedProfile = resolveAnalysisProfile(mergedSettings, tabData.tabs.length);
+            if (resolvedProfile.id !== profile.id) {
+              profile = resolvedProfile;
+              diagnostics.profile = profile.id;
+              requestOptions.timeoutMs = profile.requestTimeoutMs;
+              requestOptions.stallTimeoutMs = profile.stallTimeoutMs;
+              requestOptions.keepAlive = profile.keepAlive;
+            }
+
             await warmupPromise;
             throwIfCancelled(runController.signal);
 
