@@ -125,7 +125,7 @@ export const DEFAULT_SETTINGS = {
   // Local Provider Settings
   ollama: {
     endpoint: 'http://localhost:11434',
-    model: 'gemma4:12b',
+    model: 'qwen2.5:3b',
     num_ctx: 32768,
     temperature: 0.2
   },
@@ -142,10 +142,10 @@ export const DEFAULT_SETTINGS = {
   grouping: {
     scope: 'all_windows', // 'all_windows' | 'current_window'
     consolidation: 'in_place', // 'in_place' | 'consolidate_windows'
+    analysisProfile: 'auto', // 'auto' | 'fast' | 'quality'
     targetGroupCount: 'auto',
     deduplication: true,
-    extractReadability: true,
-    maxTabsPerBatch: 120
+    extractReadability: true
   },
   privacyBlocklist: []
 };
@@ -182,12 +182,11 @@ export const JUNK_TYPE_LIST = JUNK_TYPES.map(type => `'${type}'`).join(', ');
 export const LABELING_SYSTEM_PROMPT = `You are an expert semantic tab analyzer.
 Your task is to analyze a batch of browser tabs and produce a concise semantic summary for each tab.
 
-For each tab, output:
-- id: integer tab ID
-- subject: concise description of WHAT THE PAGE IS ABOUT (topic, project, product, problem). NEVER use the website or domain name.
-- entity: primary named entity or product (e.g. 'Philips 5000 Air Fryer', 'Rust Compiler', 'Tokyo Hotel')
-- intent: user goal (e.g. 'research', 'troubleshooting', 'shopping', 'reference')
-- junkType: string if this is low-value/operational (one of ${JUNK_TYPE_LIST}) or null if valuable.
+For every tab, output only its integer id and a short subject describing WHAT THE
+PAGE IS ABOUT (topic, project, product, problem), never its website or domain.
+Keep subject to 2-6 words. Include entity, intent, or junkType only when they
+materially add useful information; omit them otherwise. junkType, if included,
+must be one of ${JUNK_TYPE_LIST}.
 
 Return ONLY a valid JSON object with "tabs": [ ... ].`;
 
@@ -200,9 +199,8 @@ CRITICAL GROUPING & TAXONOMY RULES:
 2. Group titles MUST be <= 12 characters and 1-2 words. Abbreviate if needed (e.g. 'Air Fryer', 'Rust Bugs', 'Tokyo Trip', 'ML AirFryer').
 3. Include a "label" property with the full unabbreviated topic name for tooltips (e.g. "Philips Air Fryer Research").
 4. STRICTLY NO EMOJIS in group titles or labels.
-5. Minimum 3 tabs per group. Never create 1 or 2 tab groups. Merge small topics into broader groups or 'Other'.
-6. Every valid tab ID must appear in exactly one group.
-7. Return ONLY a valid JSON object matching the JSON schema.`;
+5. Every single input tab ID MUST be assigned to its most relevant semantic topic group. Never create generic 'Other' or 'Misc' groups. If a tab is a standalone topic, assign it a specific, descriptive topic group.
+6. Return ONLY a valid JSON object matching the JSON schema.`;
 
 export const SYSTEM_PROMPT = CLUSTERING_SYSTEM_PROMPT;
 
@@ -253,7 +251,6 @@ export const JSON_SCHEMA = {
             description: "Full descriptive topic label, e.g., 'Philips Air Fryer Research'"
           },
           color: {
-            type: "string",
             enum: CHROME_TAB_COLORS
           },
           rationale: {
@@ -291,10 +288,11 @@ export const JSON_SCHEMA = {
 };
 
 /**
- * Estimates token count from string content (rule of thumb: ~4 chars per token for Latin/JSON;
- * note that CJK/non-Latin scripts may have higher token density).
+ * Estimates token count from string content. JSON-heavy tab payloads measured
+ * about 10% denser than the usual four-characters-per-token heuristic, so use
+ * the conservative 3.5-character divisor when budgeting model context.
  */
 export function estimateTokens(text) {
   if (!text) return 0;
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / 3.5);
 }

@@ -38,16 +38,36 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
   }
 
   const tabMap = new Map((labeledTabs || []).map(t => [t.id, t]));
+  const inputIds = new Set((labeledTabs || []).map(t => t.id));
   const seenTitles = new Map();
   const seenLabels = new Map();
+  let maxGroupSize = 0;
+  let dominantGroupTitle = '';
 
   for (let i = 0; i < plan.groups.length; i++) {
     const group = plan.groups[i];
+    if (!group || typeof group !== 'object') continue;
     const rawTitle = (group.title || '').trim().toLowerCase();
     const rawLabel = (group.label || group.title || '').trim().toLowerCase();
     const tabIds = group.tabIds || [];
 
-    // 1. Check title against known site tokens
+    // 1. Check for out-of-input / hallucinated tab IDs
+    if (inputIds.size > 0) {
+      const unknownIds = tabIds.filter(id => !inputIds.has(id));
+      if (unknownIds.length > 0) {
+        violations.push(
+          `Group "${group.title || 'Untitled'}" contains ${unknownIds.length} hallucinated tab ID(s) (${unknownIds.slice(0, 3).join(', ')}${unknownIds.length > 3 ? '...' : ''}) that were not in the input set`
+        );
+      }
+    }
+
+    const validGroupTabCount = inputIds.size > 0 ? tabIds.filter(id => inputIds.has(id)).length : tabIds.length;
+    if (validGroupTabCount > maxGroupSize) {
+      maxGroupSize = validGroupTabCount;
+      dominantGroupTitle = group.title || 'Untitled';
+    }
+
+    // 2. Check title against known site tokens
     for (const site of SITE_TOKENS) {
       if (rawTitle === site || rawTitle === site.replace(/\s+/g, '') || rawTitle.startsWith(site + ' ') || rawTitle.endsWith(' ' + site)) {
         violations.push(`Group "${group.title}" is named after website "${site}" rather than a topic`);
@@ -55,7 +75,7 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
       }
     }
 
-    // 2. Check if tabs are >80% one domain but span multiple distinct subjects
+    // 3. Check if tabs are >80% one domain but span multiple distinct subjects
     if (tabIds.length >= 3) {
       const domainCounts = new Map();
       const distinctSubjects = new Set();
@@ -78,7 +98,7 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
       }
     }
 
-    // 3. Duplicate checks
+    // 4. Duplicate checks
     const normTitle = rawTitle.replace(/[^\w]/g, '');
     const normLabel = rawLabel.replace(/[^\w]/g, '');
 
@@ -93,6 +113,13 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
     } else if (normLabel) {
       seenLabels.set(normLabel, i);
     }
+  }
+
+  // 5. Check for degenerate single-group plan or clustering collapse
+  if (inputIds.size >= 6 && plan.groups.length === 1) {
+    violations.push(`Plan collapsed all ${inputIds.size} tabs into a single group "${plan.groups[0]?.title || 'Group'}" without topic clustering`);
+  } else if (inputIds.size >= 10 && plan.groups.length < 3 && maxGroupSize / Math.max(1, inputIds.size) >= 0.85) {
+    violations.push(`Plan concentrated ${Math.round((maxGroupSize / inputIds.size) * 100)}% of tabs into single dominant group "${dominantGroupTitle}"`);
   }
 
   return {
@@ -189,8 +216,114 @@ export function granularityToMinSize(granularity) {
 }
 
 /**
+ * Normalizes raw LLM grouping output across dictionary formats, property name variations,
+ * and string/object ID representations into clean integer tabId lists.
+ */
+export function normalizePlanGroups(plan, validTabIds = null) {
+  if (!plan) return { summary: '', groups: [], suggestedActions: [] };
+  let rawGroups = plan.groups;
+  if (!rawGroups && typeof plan === 'object') {
+    const entries = Object.entries(plan).filter(([k, v]) => Array.isArray(v) && k !== 'suggestedActions');
+    if (entries.length > 0) {
+      rawGroups = entries.map(([title, tabIds]) => ({ title, tabIds }));
+    }
+  } else if (typeof rawGroups === 'object' && !Array.isArray(rawGroups)) {
+    rawGroups = Object.entries(rawGroups).map(([title, tabIds]) => ({ title, tabIds }));
+  }
+
+  if (!Array.isArray(rawGroups)) rawGroups = [];
+
+  const normalized = rawGroups.map(group => {
+    if (!group || typeof group !== 'object') return null;
+    const title = group.title || group.name || group.label || 'Other';
+    const label = group.label || group.title || title;
+    const color = group.color || 'blue';
+    const rationale = group.rationale || group.reason || '';
+
+    const rawIds = group.tabIds ?? group.tabs ?? group.tab_ids ?? group.ids ?? group.i ?? [];
+    const tabIds = [];
+    if (Array.isArray(rawIds)) {
+      for (const item of rawIds) {
+        let id = null;
+        if (typeof item === 'number' && Number.isFinite(item)) {
+          id = item;
+        } else if (typeof item === 'string' && /^\d+$/.test(item.trim())) {
+          id = Number(item.trim());
+        } else if (item && typeof item === 'object') {
+          const nestedId = item.id ?? item.tabId ?? item.tab_id ?? item.i;
+          if (nestedId !== undefined && nestedId !== null && !isNaN(Number(nestedId))) {
+            id = Number(nestedId);
+          }
+        }
+        if (id !== null && (!validTabIds || validTabIds.has(id))) {
+          tabIds.push(id);
+        }
+      }
+    }
+
+    return {
+      title,
+      label,
+      color,
+      rationale,
+      tabIds: Array.from(new Set(tabIds))
+    };
+  }).filter(g => g && g.tabIds.length > 0);
+
+  return {
+    summary: plan.summary || '',
+    warning: plan.warning || undefined,
+    groups: normalized,
+    suggestedActions: Array.isArray(plan.suggestedActions) ? plan.suggestedActions : []
+  };
+}
+
+const STOPWORDS = new Set([
+  'and', 'the', 'for', 'with', 'from', 'this', 'that', 'how', 'what', 'why',
+  'app', 'site', 'page', 'tab', 'tabs', 'group', 'groups', 'com', 'org', 'net',
+  'http', 'https', 'www', 'you', 'your', 'about', 'guide', 'into', 'using',
+  'does', 'help', 'search', 'home', 'main', 'view', 'post', 'thread', 'reddit',
+  'kagi', 'google', 'github', 'youtube'
+]);
+
+export function extractKeywords(text) {
+  if (!text || typeof text !== 'string') return [];
+  const words = new Set();
+  
+  // 1. Split CamelCase / PascalCase / compound words: "OpenCodex" -> "Open", "Codex"
+  const spaced = text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([a-zA-Z])/g, '$1 $2');
+
+  // 2. Clean and tokenize spaced words
+  const tokens = spaced
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 3 && !STOPWORDS.has(word));
+
+  for (const token of tokens) {
+    words.add(token);
+  }
+
+  // 3. Also include original un-split alpha tokens if length >= 3
+  const rawTokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 3 && !STOPWORDS.has(word));
+
+  for (const token of rawTokens) {
+    words.add(token);
+  }
+
+  return Array.from(words);
+}
+
+/**
  * Ensures every group has at least minSize tabs (default 3).
- * Merges smaller groups and consolidates 'Other'.
+ * Merges smaller groups and consolidates 'Other' without destroying the entire plan.
  */
 export function consolidateSmallGroups(groups, minSize = 3) {
   if (!groups || groups.length === 0) return [];
@@ -199,6 +332,7 @@ export function consolidateSmallGroups(groups, minSize = 3) {
   const merged = mergeDuplicateGroups(groups);
 
   const validGroups = [];
+  const smallGroups = [];
   const leftoverTabIds = [];
 
   for (const group of merged) {
@@ -207,14 +341,24 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     } else if (group.tabIds.length >= minSize) {
       validGroups.push(group);
     } else {
-      leftoverTabIds.push(...group.tabIds);
+      smallGroups.push(group);
     }
   }
 
-  // Handle leftovers / Other: keep as dedicated 'Other' group to avoid polluting subject clusters
+  // Preserve 2-tab groups with semantic topic titles rather than destroying them into 'Other'
+  for (const small of smallGroups) {
+    if (small.tabIds.length >= 2) {
+      validGroups.push(small);
+    } else {
+      leftoverTabIds.push(...small.tabIds);
+    }
+  }
+
+  // Handle true leftovers / Other: keep as dedicated 'Other' group
   if (leftoverTabIds.length > 0) {
     validGroups.push({
       title: 'Other',
+      label: 'Other',
       color: 'grey',
       rationale: 'Unassigned or standalone reference tabs',
       tabIds: leftoverTabIds
@@ -463,44 +607,172 @@ export class TabOrganizer {
    * Reconciles the LLM grouping plan with all raw tabs, ensuring 100% of tabs are grouped.
    * Guarantees:
    * 1. No duplicate groups (merges same/synonymous titles like Music+Music, Code+Coding, Search+Kagi).
-   * 2. Every group has >2 tabs (at least 3 tabs).
+   * 2. Preserves semantic group clusters without collapsing large tab sets into a single 'Other' group.
    * 3. Every title is at most 12 characters and has NO emojis.
    * 4. Adjacent groups have strictly alternating contrasting colors.
    */
   static reconcilePlanWithRawTabs(plan, rawTabs, granularity = 'balanced') {
-    if (!plan) plan = { groups: [] };
-    if (!plan.groups) plan.groups = [];
+    const validTabIds = new Set((rawTabs || []).map(t => t.tabId ?? t.id));
+    const normalizedPlan = normalizePlanGroups(plan, validTabIds);
     const minSize = granularityToMinSize(granularity);
 
     const assignedTabIds = new Set();
-    plan.groups.forEach(g => {
+    normalizedPlan.groups.forEach(g => {
       (g.tabIds || []).forEach(id => assignedTabIds.add(id));
     });
 
-    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
+    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId ?? t.id) && !t.pinned);
 
     if (unassignedTabs.length > 0) {
       console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);
 
-      // Route all unassigned tabs into Other group
-      plan.groups.push({
-        title: 'Other',
-        color: 'grey',
-        rationale: 'Unassigned or standalone reference tabs',
-        tabIds: unassignedTabs.map(t => t.tabId)
+      const rawTabMap = new Map((rawTabs || []).map(t => [t.tabId ?? t.id, t]));
+
+      // Build keyword profiles for existing groups
+      const groupProfiles = normalizedPlan.groups.map(grp => {
+        const titleTokens = extractKeywords(grp.title);
+        const labelTokens = extractKeywords(grp.label);
+        const rationaleTokens = extractKeywords(grp.rationale);
+        const assignedTabTokens = (grp.tabIds || []).flatMap(id => {
+          const tab = rawTabMap.get(id);
+          return tab ? extractKeywords(tab.title) : [];
+        });
+        const allKeywords = new Set([
+          ...titleTokens,
+          ...labelTokens,
+          ...rationaleTokens,
+          ...assignedTabTokens
+        ]);
+        return {
+          group: grp,
+          cleanTitle: cleanAndShortenTitle(grp.title).toLowerCase(),
+          keywords: allKeywords
+        };
       });
+
+      const remainingUnassigned = [];
+
+      // Step 1: Semantic matching of unassigned tabs into existing groups
+      for (const tab of unassignedTabs) {
+        const tabId = tab.tabId ?? tab.id;
+        const tabTokens = new Set([
+          ...extractKeywords(tab.title),
+          ...extractKeywords(tab.subject),
+          ...extractKeywords(tab.entity),
+          ...extractKeywords(tab.url)
+        ]);
+
+        let bestGroup = null;
+        let bestScore = 0;
+
+        for (const profile of groupProfiles) {
+          let score = 0;
+          const lowerTitle = (tab.title || '').toLowerCase();
+          const lowerUrl = (tab.url || '').toLowerCase();
+
+          // High-confidence title or URL substring match against group title
+          if (profile.cleanTitle && profile.cleanTitle.length >= 3 && profile.cleanTitle !== 'other') {
+            if (lowerTitle.includes(profile.cleanTitle) || lowerUrl.includes(profile.cleanTitle)) {
+              score += 4;
+            }
+          }
+
+          // Bidirectional keyword and substring matching
+          for (const token of tabTokens) {
+            if (profile.keywords.has(token)) {
+              score += 2;
+            }
+            if (token.length >= 4 && profile.cleanTitle && profile.cleanTitle !== 'other') {
+              if (profile.cleanTitle.includes(token)) {
+                score += 3;
+              }
+            }
+          }
+
+          for (const kw of profile.keywords) {
+            if (kw.length >= 4 && (lowerTitle.includes(kw) || lowerUrl.includes(kw))) {
+              score += 2;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestGroup = profile.group;
+          }
+        }
+
+        if (bestGroup && bestScore >= 2) {
+          bestGroup.tabIds.push(tabId);
+          assignedTabIds.add(tabId);
+        } else {
+          remainingUnassigned.push(tab);
+        }
+      }
+
+      // Step 2: Semantic topic clustering for remaining unassigned tabs
+      if (remainingUnassigned.length > 0) {
+        const clusterMap = new Map();
+
+        for (const tab of remainingUnassigned) {
+          const tokens = new Set([
+            ...extractKeywords(tab.title),
+            ...extractKeywords(tab.subject),
+            ...extractKeywords(tab.entity),
+            ...extractKeywords(tab.url)
+          ]);
+          for (const token of tokens) {
+            if (!clusterMap.has(token)) clusterMap.set(token, []);
+            clusterMap.get(token).push(tab);
+          }
+        }
+
+        const assignedRemainingTabIds = new Set();
+        const sortedClusters = Array.from(clusterMap.entries())
+          .filter(([, tabs]) => tabs.length >= 2)
+          .sort((a, b) => b[1].length - a[1].length);
+
+        for (const [keyword, tabs] of sortedClusters) {
+          const unassignedInCluster = tabs.filter(t => !assignedRemainingTabIds.has(t.tabId ?? t.id));
+          if (unassignedInCluster.length >= 2) {
+            const clusterTitle = keyword.charAt(0).toUpperCase() + keyword.slice(1);
+            const clusterTabIds = unassignedInCluster.map(t => t.tabId ?? t.id);
+            clusterTabIds.forEach(id => assignedRemainingTabIds.add(id));
+
+            normalizedPlan.groups.push({
+              title: cleanAndShortenTitle(clusterTitle),
+              label: clusterTitle,
+              color: 'cyan',
+              rationale: `Grouped by topic (${clusterTitle})`,
+              tabIds: clusterTabIds
+            });
+          }
+        }
+
+        // Step 3: Truly isolated singletons get specific topic titles rather than 'Other'
+        const isolatedTabs = remainingUnassigned.filter(t => !assignedRemainingTabIds.has(t.tabId ?? t.id));
+        for (const singleTab of isolatedTabs) {
+          const singleTitle = cleanAndShortenTitle(singleTab.subject || singleTab.title || 'Reference');
+          normalizedPlan.groups.push({
+            title: singleTitle,
+            label: singleTab.title || singleTitle,
+            color: 'cyan',
+            rationale: `Standalone topic (${singleTitle})`,
+            tabIds: [singleTab.tabId ?? singleTab.id]
+          });
+        }
+      }
     }
 
     // Step 1: Merge duplicates
     // Step 2: Enforce the granularity minimum tab count across the entire plan
-    plan.groups = consolidateSmallGroups(plan.groups, minSize);
+    normalizedPlan.groups = consolidateSmallGroups(normalizedPlan.groups, minSize);
 
     // Step 3: Enforce strictly alternating colors across all groups
-    applyAlternatingColors(plan.groups);
+    applyAlternatingColors(normalizedPlan.groups);
 
     // Step 4: Persist the granularity on the plan so the Apply path enforces the same min size
-    plan.granularity = granularity;
+    normalizedPlan.granularity = granularity;
 
-    return plan;
+    return normalizedPlan;
   }
 }

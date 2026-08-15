@@ -8,118 +8,255 @@ import { LABELING_SYSTEM_PROMPT } from '../shared/constants.js';
 import { constructLabelingPrompt } from './content-distiller.js';
 import { detectJunk } from '../shared/junk-rules.js';
 import { LLMAdapter } from './llm-adapter.js';
+import { planAdaptivePass1Batches, resolveAnalysisProfile } from './analysis-profile.js';
 
-export const PASS1_BATCH_SIZE = 20;
+function createJunkAction(tab, junkType) {
+  return {
+    action: 'close_junk',
+    tabId: tab.id,
+    junkType,
+    reason: `${junkType.replace(/_/g, ' ')}: ${tab.title || tab.domain}`
+  };
+}
 
-/**
- * Executes Pass 1: Batched Semantic Labeling
- * @param {Array<object>} distilledTabs
- * @param {object} settings
- * @param {Function} onProgress
- * @returns {Promise<{ labeledTabs: Array<object>, junkActions: Array<object> }>}
- */
-export async function labelTabsInBatches(distilledTabs, settings, onProgress = null) {
-  if (!distilledTabs || distilledTabs.length === 0) {
-    return { labeledTabs: [], junkActions: [] };
-  }
+function classifyFailure(error) {
+  const message = error?.message || 'Unknown request failure';
+  if (/cancel/i.test(message)) return 'cancelled';
+  if (/deadline|no response activity|timed out/i.test(message)) return 'timeout';
+  if (/parse|json|schema/i.test(message)) return 'parse';
+  return 'request';
+}
 
-  const allCleanLabeled = [];
-  const allJunkActions = [];
-  const totalTabs = distilledTabs.length;
-
-  const totalBatches = Math.ceil(totalTabs / PASS1_BATCH_SIZE);
-
-  for (let i = 0; i < totalBatches; i++) {
-    const startIdx = i * PASS1_BATCH_SIZE;
-    const endIdx = Math.min(startIdx + PASS1_BATCH_SIZE, totalTabs);
-    const batch = distilledTabs.slice(startIdx, endIdx);
-
-    if (onProgress) {
-      onProgress({
-        stage: 'thinking',
-        batchIndex: i + 1,
-        totalBatches,
-        completed: startIdx,
-        total: totalTabs,
-        message: `Pass 1/2: Labeling semantic subjects (batch ${i + 1}/${totalBatches})...`
+function readLabels(result, allowedIds, target) {
+  const rawList = result?.value?.tabs || (Array.isArray(result?.value) ? result.value : []);
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    const rawId = item.id ?? item.i ?? item.tabId ?? item.tab_id;
+    const id = typeof rawId === 'number' && Number.isFinite(rawId)
+      ? rawId
+      : (typeof rawId === 'string' && /^\d+$/.test(rawId.trim()) ? Number(rawId.trim()) : null);
+    if (id !== null && allowedIds.has(id)) {
+      const subject = item.subject ?? item.s ?? item.title ?? item.t;
+      const entity = item.entity ?? item.e ?? item.schemaName;
+      const intent = item.intent ?? item.n;
+      const junkType = item.junkType ?? item.junk_type ?? item.j;
+      target.set(id, {
+        id,
+        subject: subject !== undefined && subject !== null ? String(subject).trim() : undefined,
+        entity: entity !== undefined && entity !== null ? String(entity).trim() : undefined,
+        intent: intent !== undefined && intent !== null ? String(intent).trim() : undefined,
+        junkType: junkType !== undefined && junkType !== null ? String(junkType).trim() : null
       });
     }
+  }
+}
 
-    let batchLabelsMap = new Map();
+function requestOptionsForBatch({ profile, descriptor, batchIndex, totalBatches, attempt, retryReason, runOptions }) {
+  return {
+    systemPrompt: LABELING_SYSTEM_PROMPT,
+    // Plain json mode, not the strict LABELING_JSON_SCHEMA: schema-constrained
+    // decoding forces every declared field to be emitted verbatim rather than
+    // letting the model terminate early (measured 6.8x slower, doc-5). Coverage
+    // is instead protected by the prompt's explicit "every ID exactly once"
+    // instruction plus the existing missing-ID retry below.
+    phase: 'pass1',
+    batchIndex,
+    totalBatches,
+    attempt,
+    // Streaming lets the adapter refresh the inactivity deadline for every
+    // Ollama NDJSON chunk, distinguishing slow progress from a true stall.
+    stream: true,
+    signal: runOptions.signal,
+    timeoutMs: runOptions.timeoutMs ?? profile.requestTimeoutMs,
+    stallTimeoutMs: runOptions.stallTimeoutMs ?? profile.stallTimeoutMs,
+    numCtx: descriptor.contextLimit,
+    outputReserve: descriptor.outputReserve,
+    numPredict: descriptor.outputReserve,
+    keepAlive: profile.keepAlive,
+    onMetrics: metrics => runOptions.onMetrics?.({ ...metrics, retryReason })
+  };
+}
+
+/**
+ * Executes Pass 1: deterministic junk filtering followed by token-budgeted
+ * semantic labeling. Fast mode sends compact evidence in larger batches;
+ * Quality keeps richer evidence and conservative batches.
+ */
+export async function labelTabsInBatches(distilledTabs, settings, onProgress = null, runOptions = {}) {
+  if (!distilledTabs?.length) {
+    return { labeledTabs: [], junkActions: [], redundancyActions: [], locallySkipped: 0 };
+  }
+
+  const profile = runOptions.profile || resolveAnalysisProfile(settings);
+  const allCleanLabeled = [];
+  const allJunkActions = [];
+  const candidates = [];
+
+  // Known operational tabs do not need expensive semantic inference. Ambiguous
+  // pages still reach the model, which may independently classify them as junk.
+  for (const tab of distilledTabs) {
+    const localJunk = tab.localJunk || detectJunk(tab);
+    if (localJunk) {
+      allJunkActions.push(createJunkAction(tab, localJunk));
+    } else {
+      candidates.push(tab);
+    }
+  }
+
+  const locallySkippedCount = allJunkActions.length;
+
+  if (onProgress && locallySkippedCount > 0) {
+    onProgress({
+      stage: 'thinking',
+      completed: 0,
+      total: candidates.length,
+      locallySkipped: locallySkippedCount,
+      profile: profile.id,
+      message: `Pass 1/2: Routed ${allJunkActions.length} known operational tabs locally.`
+    });
+  }
+
+  if (candidates.length === 0) {
+    return {
+      labeledTabs: [],
+      junkActions: allJunkActions,
+      redundancyActions: [],
+      locallySkipped: locallySkippedCount
+    };
+  }
+
+  const batches = planAdaptivePass1Batches(candidates, {
+    settings,
+    profile,
+    createPrompt: constructLabelingPrompt,
+    systemPrompt: LABELING_SYSTEM_PROMPT
+  });
+  const totalBatches = batches.length;
+  let completed = 0;
+
+  for (let index = 0; index < totalBatches; index++) {
+    const descriptor = batches[index];
+    const batch = descriptor.tabs;
+    const batchIndex = index + 1;
+    const batchIds = new Set(batch.map(tab => tab.id));
+    const batchLabelsMap = new Map();
+    let latestMetrics = null;
+    let retryCount = 0;
+    let retryReason = null;
+    let initialFailure = null;
+
+    onProgress?.({
+      stage: 'thinking',
+      batchIndex,
+      totalBatches,
+      completed,
+      total: candidates.length,
+      locallySkipped: locallySkippedCount,
+      profile: profile.id,
+      estimatedTokens: descriptor.estimatedPromptTokens,
+      maxContext: descriptor.contextLimit,
+      message: `Pass 1/2: Labeling ${batch.length} semantic tabs (batch ${batchIndex}/${totalBatches})...`
+    });
 
     try {
-      const prompt = constructLabelingPrompt(batch);
-      const res = await LLMAdapter.generateGroupingPlan(prompt, settings, null, LABELING_SYSTEM_PROMPT);
-      const rawList = res?.tabs || (Array.isArray(res) ? res : []);
-
-      for (const item of rawList) {
-        if (item && item.id !== undefined) {
-          batchLabelsMap.set(item.id, item);
-        }
-      }
-    } catch (err) {
-      console.warn(`[TabLabeler] Batch ${i + 1} labeling failed, will retry missing tabs:`, err.message);
+      const result = await LLMAdapter.generateGroupingPlan(
+        constructLabelingPrompt(batch, profile),
+        settings,
+        requestOptionsForBatch({ profile, descriptor, batchIndex, totalBatches, attempt: 1, runOptions })
+      );
+      latestMetrics = result.metrics;
+      readLabels(result, batchIds, batchLabelsMap);
+    } catch (error) {
+      if (runOptions.signal?.aborted) throw error;
+      initialFailure = error;
+      console.warn(`[TabLabeler] Batch ${batchIndex} labeling failed:`, error.message);
     }
 
-    // Identify missing tabs in batch
-    const missingTabs = batch.filter(t => !batchLabelsMap.has(t.id));
+    const missingTabs = batch.filter(tab => !batchLabelsMap.has(tab.id));
+    const parsedPartialResult = batchLabelsMap.size > 0;
+    const mayRetry = missingTabs.length > 0 && (parsedPartialResult || profile.retryFullBatch);
 
-    if (missingTabs.length > 0) {
-      console.log(`[TabLabeler] Retrying ${missingTabs.length} missing tabs for batch ${i + 1}...`);
+    if (mayRetry) {
+      retryCount = 1;
+      retryReason = parsedPartialResult ? 'coverage' : classifyFailure(initialFailure);
+      console.log(`[TabLabeler] Retrying ${missingTabs.length} ${retryReason} tab labels for batch ${batchIndex}...`);
       try {
-        const retryPrompt = constructLabelingPrompt(missingTabs);
-        const retryRes = await LLMAdapter.generateGroupingPlan(retryPrompt, settings, null, LABELING_SYSTEM_PROMPT);
-        const retryList = retryRes?.tabs || (Array.isArray(retryRes) ? retryRes : []);
-
-        for (const item of retryList) {
-          if (item && item.id !== undefined) {
-            batchLabelsMap.set(item.id, item);
-          }
-        }
-      } catch (retryErr) {
-        console.warn(`[TabLabeler] Retry failed for missing tabs:`, retryErr.message);
+        const retryDescriptor = {
+          ...descriptor,
+          tabs: missingTabs,
+          outputReserve: Math.min(descriptor.outputReserve, Math.max(96, missingTabs.length * profile.pass1OutputTokensPerTab + 64))
+        };
+        const retryResult = await LLMAdapter.generateGroupingPlan(
+          constructLabelingPrompt(missingTabs, profile),
+          settings,
+          requestOptionsForBatch({
+            profile,
+            descriptor: retryDescriptor,
+            batchIndex,
+            totalBatches,
+            attempt: 2,
+            retryReason,
+            runOptions
+          })
+        );
+        latestMetrics = retryResult.metrics;
+        readLabels(retryResult, new Set(missingTabs.map(tab => tab.id)), batchLabelsMap);
+      } catch (error) {
+        if (runOptions.signal?.aborted) throw error;
+        console.warn(`[TabLabeler] ${retryReason} retry failed for batch ${batchIndex}:`, error.message);
       }
     }
 
-    // Process all tabs in current batch with fallbacks
+    let fallbackCount = 0;
     for (const tab of batch) {
-      const localJunk = tab.localJunk || detectJunk(tab);
-      const labelData = batchLabelsMap.get(tab.id) || {
+      const labelData = batchLabelsMap.get(tab.id);
+      if (!labelData) fallbackCount++;
+      const resolved = labelData || {
         id: tab.id,
         subject: tab.title || tab.domain || 'Reference',
         entity: tab.schemaName || tab.domain || '',
         intent: 'reference',
-        junkType: localJunk
+        junkType: null
       };
 
-      const finalJunkType = localJunk || labelData.junkType || null;
-
-      if (finalJunkType) {
-        // Tagged as junk -> route directly to suggestedActions
-        allJunkActions.push({
-          action: 'close_junk',
-          tabId: tab.id,
-          junkType: finalJunkType,
-          reason: `${finalJunkType.replace(/_/g, ' ')}: ${tab.title || tab.domain}`
-        });
+      if (resolved.junkType) {
+        allJunkActions.push(createJunkAction(tab, resolved.junkType));
       } else {
-        // Valuable tab -> include in Pass 2 clustering payload
         allCleanLabeled.push({
           id: tab.id,
-          subject: labelData.subject || tab.title || 'Topic',
-          entity: labelData.entity || tab.schemaName || '',
-          intent: labelData.intent || 'reference'
+          title: tab.title || '',
+          domain: tab.domain || '',
+          url: tab.url || '',
+          subject: resolved.subject || tab.title || 'Topic',
+          entity: resolved.entity || tab.schemaName || '',
+          intent: resolved.intent || 'reference'
         });
       }
     }
+
+    completed += batch.length;
+    onProgress?.({
+      stage: 'thinking',
+      batchIndex,
+      totalBatches,
+      completed,
+      total: candidates.length,
+      locallySkipped: locallySkippedCount,
+      retryCount,
+      retryReason,
+      fallbackCount,
+      profile: profile.id,
+      metrics: latestMetrics,
+      message: `Pass 1/2: Completed batch ${batchIndex}/${totalBatches}${retryCount ? ` after ${retryReason} retry` : ''}.`
+    });
   }
 
   const redundancyActions = detectSemanticRedundancies(allCleanLabeled);
-
   return {
     labeledTabs: allCleanLabeled,
     junkActions: allJunkActions,
-    redundancyActions
+    redundancyActions,
+    locallySkipped: locallySkippedCount
   };
 }
 
@@ -140,11 +277,11 @@ const NON_PLURAL_S_WORDS = new Set(['news', 'lens', 'series', 'species', 'does',
  */
 function normalizeLabel(value) {
   const normalized = (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  if (normalized.length <= 3) return normalized;                            // gas, bus, was, his, is, us
-  if (NON_PLURAL_S_WORDS.has(normalized)) return normalized;                // news, lens, series, species, does, goes, chaos
-  if (/(ss|us|is|as)$/.test(normalized)) return normalized;                 // class, status, analysis, alias
-  if (/(x|ch|sh|ss|z|o)es$/.test(normalized)) return normalized.slice(0, -2); // boxes -> box, watches -> watch, addresses -> address, heroes -> hero
-  if (normalized.endsWith('s')) return normalized.slice(0, -1);             // reviews -> review, air fryers -> air fryer, cookies -> cookie, videos -> video
+  if (normalized.length <= 3) return normalized;
+  if (NON_PLURAL_S_WORDS.has(normalized)) return normalized;
+  if (/(ss|us|is|as)$/.test(normalized)) return normalized;
+  if (/(x|ch|sh|ss|z|o)es$/.test(normalized)) return normalized.slice(0, -2);
+  if (normalized.endsWith('s')) return normalized.slice(0, -1);
   return normalized;
 }
 
@@ -170,20 +307,16 @@ export function detectSemanticRedundancies(labeledTabs = []) {
     let matchKey = null;
 
     if (normEnt) {
-      // Entity present: subject near-match + exact entity is strong signal.
       matchKey = `ent:${normEnt}:::sub:${normSub}`;
       if (seenMap.has(matchKey)) {
         isRedundant = true;
         matchedTabId = seenMap.get(matchKey);
       }
-    } else {
-      // Empty entity: only flag specific subjects, never generic fallbacks.
-      if (normSub.length >= MIN_EMPTY_ENTITY_SUBJECT_LENGTH && !GENERIC_SUBJECTS.has(normSub)) {
-        matchKey = `sub:${normSub}`;
-        if (seenMap.has(matchKey)) {
-          isRedundant = true;
-          matchedTabId = seenMap.get(matchKey);
-        }
+    } else if (normSub.length >= MIN_EMPTY_ENTITY_SUBJECT_LENGTH && !GENERIC_SUBJECTS.has(normSub)) {
+      matchKey = `sub:${normSub}`;
+      if (seenMap.has(matchKey)) {
+        isRedundant = true;
+        matchedTabId = seenMap.get(matchKey);
       }
     }
 
@@ -202,5 +335,3 @@ export function detectSemanticRedundancies(labeledTabs = []) {
 
   return redundancyActions;
 }
-
-
