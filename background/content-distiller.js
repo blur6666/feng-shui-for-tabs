@@ -20,12 +20,28 @@ export function distillTabsForPrompt(tabs, options = {}) {
     }
 
     const ext = tab.extractedData || {};
-    const headings = (ext.headings || []).map(h => h.text).slice(0, 3);
+    const headings = (ext.headings || []).map(h => (typeof h === 'string' ? h : h.text)).filter(Boolean).slice(0, 3);
     
     // Clean snippet
     let snippet = ext.readableText || '';
     if (snippet.length > maxSnippetLength) {
       snippet = snippet.slice(0, maxSnippetLength) + '...';
+    }
+
+    // Filter platform context to subject signals only (drop platform / category)
+    let subjectSignals = undefined;
+    if (ext.platformContext) {
+      const p = ext.platformContext;
+      const filtered = {};
+      if (p.subreddit) filtered.subreddit = p.subreddit;
+      if (p.repo) filtered.repo = p.repo;
+      if (p.channel) filtered.channel = p.channel;
+      if (p.tags && p.tags.length > 0) filtered.tags = p.tags;
+      if (p.wiki) filtered.wiki = p.wiki;
+      if (p.section) filtered.section = p.section;
+      if (Object.keys(filtered).length > 0) {
+        subjectSignals = filtered;
+      }
     }
 
     const tabEntry = {
@@ -34,9 +50,12 @@ export function distillTabsForPrompt(tabs, options = {}) {
       title: tab.title || 'Untitled',
       domain: hostname,
       path: pathname && pathname !== '/' ? pathname : undefined,
+      siteName: ext.siteName || undefined,
       description: ext.metaDescription || ext.ogTitle || undefined,
+      schemaName: ext.schemaName || undefined,
+      keywords: ext.keywords && ext.keywords.length > 0 ? ext.keywords.slice(0, 8) : undefined,
       headings: headings.length > 0 ? headings : undefined,
-      platform: ext.platformContext ? ext.platformContext : undefined,
+      platformContext: subjectSignals,
       schema: ext.schemaType || undefined,
       snippet: snippet.length > 20 ? snippet : undefined
     };
