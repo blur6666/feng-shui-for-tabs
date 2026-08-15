@@ -219,7 +219,7 @@ export function granularityToMinSize(granularity) {
  * Normalizes raw LLM grouping output across dictionary formats, property name variations,
  * and string/object ID representations into clean integer tabId lists.
  */
-export function normalizePlanGroups(plan, validTabIds = null) {
+export function normalizePlanGroups(plan, validTabIds = null, idMap = null) {
   if (!plan) return { summary: '', groups: [], suggestedActions: [] };
   let rawGroups = plan.groups;
   if (!rawGroups && typeof plan === 'object') {
@@ -255,6 +255,9 @@ export function normalizePlanGroups(plan, validTabIds = null) {
           if (nestedId !== undefined && nestedId !== null && !isNaN(Number(nestedId))) {
             id = Number(nestedId);
           }
+        }
+        if (id !== null && idMap && idMap.has(id)) {
+          id = idMap.get(id);
         }
         if (id !== null && (!validTabIds || validTabIds.has(id))) {
           if (!claimedTabIds.has(id)) {
@@ -326,15 +329,146 @@ export function extractKeywords(text) {
 }
 
 /**
- * Ensures every group has at least minSize tabs (default 3).
- * Merges smaller groups and consolidates 'Other' without destroying the entire plan.
+ * Builds coherent topic clusters from Pass-1 labeled tabs and raw tab signals
+ * when Pass-2 model output is unavailable or degenerate.
+ */
+export function buildSemanticTopicClusters(labeledTabs, rawTabs = []) {
+  if (!labeledTabs || labeledTabs.length === 0) return [];
+  const rawTabMap = new Map((rawTabs || []).map(t => [t.tabId ?? t.id, t]));
+
+  // Step 1: Cluster by explicit entities and platform services
+  const entityGroups = new Map();
+  const unclustered = [];
+
+  for (const t of labeledTabs) {
+    const rawTab = rawTabMap.get(t.id);
+    const entity = (t.entity || rawTab?.extractedData?.platformContext?.service || rawTab?.extractedData?.platformContext?.subreddit || '').trim();
+    if (entity && entity.length >= 3 && entity.toLowerCase() !== 'reference') {
+      const key = cleanAndShortenTitle(entity);
+      if (!entityGroups.has(key)) entityGroups.set(key, { title: key, label: entity, tabIds: [] });
+      entityGroups.get(key).tabIds.push(t.id);
+    } else {
+      unclustered.push(t);
+    }
+  }
+
+  const formedGroups = [];
+  for (const group of entityGroups.values()) {
+    if (group.tabIds.length >= 2) {
+      formedGroups.push({
+        title: group.title,
+        label: group.label,
+        color: 'blue',
+        rationale: `Grouped by topic (${group.label})`,
+        tabIds: group.tabIds
+      });
+    } else {
+      const singleId = group.tabIds[0];
+      const singleTab = labeledTabs.find(t => t.id === singleId);
+      if (singleTab) unclustered.push(singleTab);
+    }
+  }
+
+  // Step 2: Shared keyword clustering for unclustered tabs
+  const assignedTabIds = new Set(formedGroups.flatMap(g => g.tabIds));
+  const remaining = unclustered.filter(t => !assignedTabIds.has(t.id));
+
+  const keywordMap = new Map();
+  for (const t of remaining) {
+    const rawTab = rawTabMap.get(t.id);
+    const tokens = new Set([
+      ...extractKeywords(t.subject),
+      ...extractKeywords(t.title),
+      ...extractKeywords(t.url),
+      ...extractKeywords(rawTab?.title),
+      ...extractKeywords(rawTab?.url)
+    ]);
+    for (const token of tokens) {
+      if (!keywordMap.has(token)) keywordMap.set(token, []);
+      keywordMap.get(token).push(t);
+    }
+  }
+
+  const sortedKeywords = Array.from(keywordMap.entries())
+    .filter(([, tabs]) => tabs.length >= 2)
+    .sort((a, b) => b[1].length - a[1].length);
+
+  for (const [kw, tabs] of sortedKeywords) {
+    const unassignedInKw = tabs.filter(t => !assignedTabIds.has(t.id));
+    if (unassignedInKw.length >= 2) {
+      const title = cleanAndShortenTitle(kw.charAt(0).toUpperCase() + kw.slice(1));
+      const tabIds = unassignedInKw.map(t => t.id);
+      tabIds.forEach(id => assignedTabIds.add(id));
+      formedGroups.push({
+        title,
+        label: title,
+        color: 'cyan',
+        rationale: `Grouped by topic (${title})`,
+        tabIds
+      });
+    }
+  }
+
+  // Step 3: Match remaining isolated tabs against formed groups
+  const trueSingletons = remaining.filter(t => !assignedTabIds.has(t.id));
+  const unassignedAfterMatching = [];
+
+  for (const t of trueSingletons) {
+    const tabTokens = new Set([
+      ...extractKeywords(t.subject),
+      ...extractKeywords(t.title),
+      ...extractKeywords(t.url)
+    ]);
+
+    let bestGroup = null;
+    let bestScore = 0;
+
+    for (const grp of formedGroups) {
+      const grpTokens = new Set([
+        ...extractKeywords(grp.title),
+        ...extractKeywords(grp.label)
+      ]);
+      let score = 0;
+      for (const tok of tabTokens) {
+        if (grpTokens.has(tok)) score += 2;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = grp;
+      }
+    }
+
+    if (bestGroup && bestScore >= 2) {
+      bestGroup.tabIds.push(t.id);
+      assignedTabIds.add(t.id);
+    } else {
+      unassignedAfterMatching.push(t);
+    }
+  }
+
+  // Step 4: True remaining singletons get dedicated clean topic titles
+  for (const single of unassignedAfterMatching) {
+    const title = cleanAndShortenTitle(single.subject || single.title || 'Reference');
+    formedGroups.push({
+      title,
+      label: single.title || title,
+      color: 'grey',
+      rationale: `Standalone topic (${title})`,
+      tabIds: [single.id]
+    });
+  }
+
+  return formedGroups;
+}
+
+/**
+ * Ensures every group has at least minSize tabs (default 3, minimum 2).
+ * Semantically merges singletons into larger matching groups and consolidates true leftovers.
  */
 export function consolidateSmallGroups(groups, minSize = 3) {
   if (!groups || groups.length === 0) return [];
 
-  // Step 1: Merge any groups sharing identical/synonymous titles
   const merged = mergeDuplicateGroups(groups);
-
   const validGroups = [];
   const smallGroups = [];
   const leftoverTabIds = [];
@@ -342,30 +476,54 @@ export function consolidateSmallGroups(groups, minSize = 3) {
   for (const group of merged) {
     if (group.title === 'Other') {
       leftoverTabIds.push(...group.tabIds);
-    } else if (group.tabIds.length >= minSize) {
+    } else if (group.tabIds.length >= 2) {
       validGroups.push(group);
     } else {
       smallGroups.push(group);
     }
   }
 
-  // Preserve 2-tab groups with semantic topic titles rather than destroying them into 'Other'
+  // Semantic merging of 1-tab singletons into matching valid groups
   for (const small of smallGroups) {
-    if (small.tabIds.length >= 2) {
-      validGroups.push(small);
+    const smallTokens = new Set([
+      ...extractKeywords(small.title),
+      ...extractKeywords(small.label),
+      ...extractKeywords(small.rationale)
+    ]);
+
+    let bestGroup = null;
+    let bestScore = 0;
+
+    for (const valid of validGroups) {
+      const validTokens = new Set([
+        ...extractKeywords(valid.title),
+        ...extractKeywords(valid.label)
+      ]);
+      let score = 0;
+      for (const tok of smallTokens) {
+        if (validTokens.has(tok)) score += 2;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = valid;
+      }
+    }
+
+    if (bestGroup && bestScore >= 2) {
+      bestGroup.tabIds.push(...small.tabIds);
     } else {
       leftoverTabIds.push(...small.tabIds);
     }
   }
 
-  // Handle true leftovers / Other: keep as dedicated 'Other' group
+  // Handle true leftovers: only unmatchable singletons go to 'Other'
   if (leftoverTabIds.length > 0) {
     validGroups.push({
       title: 'Other',
       label: 'Other',
       color: 'grey',
       rationale: 'Unassigned or standalone reference tabs',
-      tabIds: leftoverTabIds
+      tabIds: Array.from(new Set(leftoverTabIds))
     });
   }
 

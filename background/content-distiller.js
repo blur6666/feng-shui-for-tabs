@@ -139,11 +139,23 @@ export function constructLabelingPrompt(batchTabs, profile = null) {
 /**
  * Builds the Pass-2 prompt for clustering semantic labels into Chrome groups.
  */
-export function constructClusteringPrompt(labeledTabs, userInstructions = '', granularity = 'balanced', profile = null) {
+export function constructClusteringPrompt(labeledTabs, userInstructions = '', granularity = 'balanced', profile = null, idMap = null) {
   const fast = isFastProfile(profile);
-  const payload = fast ? labeledTabs.map(compactClusteringRecord) : labeledTabs;
+  const useDenseIds = idMap instanceof Map;
+
+  const payload = labeledTabs.map((tab, idx) => {
+    const promptId = useDenseIds ? idx + 1 : tab.id;
+    if (useDenseIds) idMap.set(promptId, tab.id);
+
+    if (fast) {
+      return compactClusteringRecord({ ...tab, id: promptId });
+    }
+    return { ...tab, id: promptId };
+  });
+
   const tabJsonString = JSON.stringify(payload);
-  const evidenceLegend = fast ? 'Input keys: i tab ID, s subject, t title hint, e entity, n intent.\n' : '';
+  const idLegend = useDenseIds ? ` (dense indices 1..${labeledTabs.length})` : '';
+  const evidenceLegend = fast ? `Input keys: i tab ID${idLegend}, s subject, t title hint, e entity, n intent.\n` : '';
 
   let granularityRule = '';
   if (granularity === 'broad') {
@@ -155,7 +167,11 @@ export function constructClusteringPrompt(labeledTabs, userInstructions = '', gr
   }
 
   const customRule = userInstructions?.trim() ? `User focus: "${userInstructions.trim()}"\n` : '';
-  return `${evidenceLegend}${customRule}Cluster ${labeledTabs.length} semantic tab labels into subject/task groups. TABS=${tabJsonString}\n\n${granularityRule}\nGroup strictly by topic/task, not host or domain. Every input tab ID must be assigned to its relevant topic group. Do not create 'Other' or 'Misc' groups. Titles must be 1-2 words and <=12 characters; label is the full descriptive topic; no emojis; use alternating Chrome colors.\nReturn only JSON: {"summary":"Brief active-work summary","groups":[{"title":"Air Fryer","label":"Air Fryer Research","color":"blue","rationale":"Product listings and reviews","tabIds":[1,2,3]}]}`;
+  const idInstruction = useDenseIds
+    ? `Strictly return tabIds using ONLY the integer index IDs (1 to ${labeledTabs.length}) provided in TABS. Do not invent or extrapolate IDs.`
+    : 'Every input tab ID must be assigned to its relevant topic group.';
+
+  return `${evidenceLegend}${customRule}Cluster ${labeledTabs.length} semantic tab labels into subject/task groups. TABS=${tabJsonString}\n\n${granularityRule}\nGroup strictly by topic/task, not host or domain. ${idInstruction} Do not create 'Other' or 'Misc' groups. Titles must be 1-2 words and <=12 characters; label is the full descriptive topic; no emojis; use alternating Chrome colors.\nReturn only JSON: {"summary":"Brief active-work summary","groups":[{"title":"Air Fryer","label":"Air Fryer Research","color":"blue","rationale":"Product listings and reviews","tabIds":[1,2,3]}]}`;
 }
 
 /**

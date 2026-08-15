@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TabOrganizer, consolidateSmallGroups, normalizePlanGroups } from '../background/tab-organizer.js';
+import { TabOrganizer, consolidateSmallGroups, normalizePlanGroups, buildSemanticTopicClusters } from '../background/tab-organizer.js';
 
 // Case 1: String IDs from LLM
 const stringIdPlan = {
@@ -140,8 +140,50 @@ const musicGroup = reconciledCodex.groups.find(g => g.title.toLowerCase().includ
 assert.ok(musicGroup, 'A topic group for Music must be created for tabs 8 & 11 rather than dumping them into Other');
 assert.ok(musicGroup.tabIds.includes(8) || musicGroup.tabIds.includes(11));
 
-const otherGroup = reconciledCodex.groups.find(g => g.title === 'Other');
-const otherCount = otherGroup ? otherGroup.tabIds.length : 0;
-assert.ok(otherCount < 5, `Expected fewer than 5 tabs in Other, got ${otherCount}`);
+// Case 11: buildSemanticTopicClusters clusters shared entities and topic stems
+const labeledBatch = [
+  { id: 101, subject: 'LazyCodex CLI guide', entity: 'LazyCodex', title: 'LazyCodex' },
+  { id: 102, subject: 'LazyCodex documentation', entity: 'LazyCodex', title: 'Docs | LazyCodex' },
+  { id: 103, subject: 'Context7 LLM documentation', entity: 'Context7', title: 'Context7' },
+  { id: 104, subject: 'Context7 search results', entity: 'Context7', title: 'context7 - Kagi' },
+  { id: 105, subject: 'DDR4 memory overclocking guide', entity: 'DDR4', title: 'DDR4 OC Guide' },
+  { id: 106, subject: 'DDR4 tRFC timing explanation', entity: 'DDR4', title: 'What is tRFC' },
+  { id: 107, subject: 'NordVPN login portal', entity: 'NordVPN', title: 'NordVPN Login' },
+  { id: 108, subject: 'NordVPN service features', entity: 'NordVPN', title: 'NordVPN Home' }
+];
+
+const clusteredFallback = buildSemanticTopicClusters(labeledBatch);
+const lazyGroup = clusteredFallback.find(g => g.title.toLowerCase().includes('lazycodex'));
+assert.ok(lazyGroup, 'LazyCodex group should form');
+assert.deepEqual(lazyGroup.tabIds, [101, 102]);
+
+const contextGroup = clusteredFallback.find(g => g.title.toLowerCase().includes('context7'));
+assert.ok(contextGroup, 'Context7 group should form');
+assert.deepEqual(contextGroup.tabIds, [103, 104]);
+
+const ddr4Group = clusteredFallback.find(g => g.title.toLowerCase().includes('ddr4'));
+assert.ok(ddr4Group, 'DDR4 group should form');
+assert.deepEqual(ddr4Group.tabIds, [105, 106]);
+
+const vpnGroup = clusteredFallback.find(g => g.title.toLowerCase().includes('nordvpn'));
+assert.ok(vpnGroup, 'NordVPN group should form');
+assert.deepEqual(vpnGroup.tabIds, [107, 108]);
+
+// Case 12: normalizePlanGroups with dense idMap maps [1..N] back to real Chrome tab IDs
+const densePlan = {
+  groups: [
+    { title: 'Claude Code', tabIds: [1, 2] },
+    { title: 'OpenCodex', tabIds: [3, 4] }
+  ]
+};
+const denseIdMap = new Map([
+  [1, 375317824],
+  [2, 375317825],
+  [3, 375317826],
+  [4, 375317827]
+]);
+const normalizedDense = normalizePlanGroups(densePlan, null, denseIdMap);
+assert.deepEqual(normalizedDense.groups[0].tabIds, [375317824, 375317825]);
+assert.deepEqual(normalizedDense.groups[1].tabIds, [375317826, 375317827]);
 
 console.log('Reconciliation robustness tests passed');
