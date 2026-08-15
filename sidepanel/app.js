@@ -448,6 +448,38 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Categorizes suggested actions into structured cleanup buckets
+function categorizeActions(actions) {
+  const buckets = {
+    duplicates: { label: 'Duplicates', icon: '👯', items: [] },
+    new_tabs: { label: 'New Tabs', icon: '📄', items: [] },
+    auth: { label: 'Auth & Thank-you', icon: '🔒', items: [] },
+    errors: { label: 'Errors', icon: '⚠️', items: [] },
+    other: { label: 'Other Cleanup', icon: '🧹', items: [] }
+  };
+
+  actions.forEach(act => {
+    const actType = (act.action || '').toLowerCase();
+    const junkType = (act.junkType || '').toLowerCase();
+    const reason = (act.reason || act.title || '').toLowerCase();
+
+    if (actType === 'close_duplicate' || junkType === 'duplicate' || reason.includes('duplicate')) {
+      buckets.duplicates.items.push(act);
+    } else if (junkType === 'new_tab' || reason.includes('new tab') || reason.includes('chrome://newtab')) {
+      buckets.new_tabs.items.push(act);
+    } else if (junkType === 'auth_or_transactional' || junkType === 'auth' || reason.includes('login') || reason.includes('oauth') || reason.includes('thank') || reason.includes('confirm') || reason.includes('auth')) {
+      buckets.auth.items.push(act);
+    } else if (junkType === 'error' || reason.includes('error') || reason.includes('404') || reason.includes('500') || reason.includes('not found')) {
+      buckets.errors.items.push(act);
+    } else {
+      buckets.other.items.push(act);
+    }
+  });
+
+  return Object.entries(buckets).filter(([, b]) => b.items.length > 0);
+}
+}
+
 // Render Results & Diff Preview
 function renderResults(plan) {
   elements.resultsContainer.classList.remove('hidden');
@@ -467,36 +499,101 @@ function renderResults(plan) {
     elements.resultsSummary.parentNode.insertBefore(warnEl, elements.resultsSummary.nextSibling);
   }
 
-  // 2. Suggested Actions (Duplicates etc.)
+  // 2. Suggested Actions Buckets (Duplicates, New Tabs, Auth, Errors)
   const actions = plan.suggestedActions || [];
   if (actions.length > 0) {
     elements.actionsSection.classList.remove('hidden');
     elements.actionsList.innerHTML = '';
 
-    actions.forEach((act) => {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'action-item';
-      const safeActionLabel = escapeHtml(act.action === 'close_duplicate' ? 'Duplicate Tab' : 'Suggested Action');
-      const safeReason = escapeHtml(act.reason || act.title || '');
-      itemEl.innerHTML = `
-        <div>
-          <strong>${safeActionLabel}</strong>
-          <p style="color: var(--text-secondary); font-size: 10px;">${safeReason}</p>
+    const populatedBuckets = categorizeActions(actions);
+
+    populatedBuckets.forEach(([bucketKey, bucket]) => {
+      const bucketEl = document.createElement('details');
+      bucketEl.className = 'action-bucket-card';
+      bucketEl.open = false; // Expandable
+
+      const summaryEl = document.createElement('summary');
+      summaryEl.className = 'action-bucket-summary';
+      summaryEl.innerHTML = `
+        <div class="bucket-header-info">
+          <span class="bucket-icon">${bucket.icon}</span>
+          <span class="bucket-label">${escapeHtml(bucket.label)}</span>
+          <span class="bucket-badge">${bucket.items.length}</span>
         </div>
-        <button class="btn-mini-danger" data-tab-id="${act.tabId}">Close</button>
+        <button class="btn-bucket-close" title="Close all ${bucket.items.length} tabs in this category">Close all (${bucket.items.length})</button>
       `;
 
-      itemEl.querySelector('button').addEventListener('click', async () => {
-        try {
-          await chrome.tabs.remove(act.tabId);
-          itemEl.remove();
-          await refreshTabStats();
-        } catch {
-          itemEl.remove();
+      // Close all tabs in this bucket
+      const closeAllBtn = summaryEl.querySelector('.btn-bucket-close');
+      closeAllBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const tabIdsToClose = bucket.items.map(it => it.tabId).filter(Boolean);
+        if (tabIdsToClose.length > 0) {
+          try {
+            await chrome.tabs.remove(tabIdsToClose);
+          } catch {}
+          tabIdsToClose.forEach(id => appState.rawTabsMap.delete(id));
         }
+
+        // Remove from plan.suggestedActions
+        plan.suggestedActions = (plan.suggestedActions || []).filter(act => !tabIdsToClose.includes(act.tabId));
+        bucketEl.remove();
+
+        if (elements.actionsList.children.length === 0) {
+          elements.actionsSection.classList.add('hidden');
+        }
+
+        await refreshTabStats();
       });
 
-      elements.actionsList.appendChild(itemEl);
+      // Tab list inside bucket
+      const itemsListEl = document.createElement('div');
+      itemsListEl.className = 'bucket-items-list';
+
+      bucket.items.forEach(act => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'action-item';
+
+        const tabData = appState.rawTabsMap.get(act.tabId) || { id: act.tabId, title: act.reason || `Tab #${act.tabId}` };
+        itemEl.innerHTML = `
+          <div class="action-item-info">
+            <span class="action-item-title" title="${tabData.title}">${tabData.title || `Tab #${act.tabId}`}</span>
+            <span class="action-item-reason">${act.reason || ''}</span>
+          </div>
+          <button class="btn-mini-danger" title="Close this tab" data-tab-id="${act.tabId}">✕</button>
+        `;
+
+        itemEl.querySelector('.btn-mini-danger').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await chrome.tabs.remove(act.tabId);
+          } catch {}
+          appState.rawTabsMap.delete(act.tabId);
+          plan.suggestedActions = (plan.suggestedActions || []).filter(a => a.tabId !== act.tabId);
+          bucket.items = bucket.items.filter(a => a.tabId !== act.tabId);
+          itemEl.remove();
+
+          if (bucket.items.length === 0) {
+            bucketEl.remove();
+            if (elements.actionsList.children.length === 0) {
+              elements.actionsSection.classList.add('hidden');
+            }
+          } else {
+            summaryEl.querySelector('.bucket-badge').textContent = bucket.items.length;
+            closeAllBtn.textContent = `Close all (${bucket.items.length})`;
+          }
+
+          await refreshTabStats();
+        });
+
+        itemsListEl.appendChild(itemEl);
+      });
+
+      bucketEl.appendChild(summaryEl);
+      bucketEl.appendChild(itemsListEl);
+      elements.actionsList.appendChild(bucketEl);
     });
   } else {
     elements.actionsSection.classList.add('hidden');
@@ -663,7 +760,7 @@ async function applyTabGroups() {
       type: MESSAGE_TYPES.APPLY_GROUPS,
       payload: {
         plan: appState.plan,
-        options: { consolidation, closeDuplicates: true }
+        options: { consolidation, closeDuplicates: false }
       }
     });
 

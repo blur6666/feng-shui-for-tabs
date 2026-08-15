@@ -358,8 +358,8 @@ export class TabOrganizer {
       }
     }
 
-    // Handle suggested actions: Close duplicates if explicitly permitted
-    if (options.closeDuplicates && plan.suggestedActions) {
+    // Handle suggested actions: Close duplicates ONLY IF explicitly requested
+    if (options.closeDuplicates === true && plan.suggestedActions) {
       for (const act of plan.suggestedActions) {
         if (act.action === 'close_duplicate' && act.tabId) {
           try {

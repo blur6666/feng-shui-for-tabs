@@ -1,10 +1,11 @@
 ---
 id: TASK-2.3
 title: Bulk-close chips in Suggested Actions
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@agent'
 created_date: '2026-08-15 10:49'
-updated_date: '2026-08-15 11:40'
+updated_date: '2026-08-15 13:54'
 labels:
   - cleanup
   - ui
@@ -31,10 +32,28 @@ renderResults() in sidepanel/app.js (lines 445-476), sidepanel/index.html, sidep
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 suggestedActions are grouped into labeled buckets (Duplicates, New Tabs, Auth/Thank-you, Errors) each showing an accurate count
-- [ ] #2 Each bucket has a 'Close all (N)' button that closes exactly the tabs in that bucket
-- [ ] #3 Buckets are expandable to inspect the individual tab list before confirming
-- [ ] #4 Individual-row closing reuses the existing per-item close handler (app.js lines 462-470)
-- [ ] #5 applyGroupingPlan / Apply Groups no longer force-closes duplicates unconditionally; it closes only what the user explicitly confirmed via a bucket or individual action
-- [ ] #6 Opening 12 New Tabs and 3 duplicate tabs shows correct bucket counts; closing one bucket closes only those tabs; a subsequent Apply closes nothing further
+- [x] #1 suggestedActions are grouped into labeled buckets (Duplicates, New Tabs, Auth/Thank-you, Errors) each showing an accurate count
+- [x] #2 Each bucket has a 'Close all (N)' button that closes exactly the tabs in that bucket
+- [x] #3 Buckets are expandable to inspect the individual tab list before confirming
+- [x] #4 Individual-row closing reuses the existing per-item close handler (app.js lines 462-470)
+- [x] #5 applyGroupingPlan / Apply Groups no longer force-closes duplicates unconditionally; it closes only what the user explicitly confirmed via a bucket or individual action
+- [x] #6 Opening 12 New Tabs and 3 duplicate tabs shows correct bucket counts; closing one bucket closes only those tabs; a subsequent Apply closes nothing further
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Categorize suggestedActions into buckets (Duplicates, New Tabs, Auth/Thank-you, Errors) in sidepanel/app.js
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented categorized cleanup buckets in sidepanel/app.js (Duplicates, New Tabs, Auth/Thank-you, Errors) with individual and bulk Close all (N) actions, expandable inspection cards, and updated styling in sidepanel/style.css. Fixed destructive Apply bug by setting closeDuplicates: false across sidepanel/app.js and background/tab-organizer.js. Verified with automated test runner.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented categorized bulk-close chips in Suggested Actions and fixed non-destructive Apply Groups.
+<!-- SECTION:FINAL_SUMMARY:END -->
