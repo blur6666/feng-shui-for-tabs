@@ -391,68 +391,21 @@ export class TabOrganizer {
       (g.tabIds || []).forEach(id => assignedTabIds.add(id));
     });
 
-    const unassignedTabs = rawTabs.filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
+    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
 
     if (unassignedTabs.length > 0) {
-      console.log(`[Reconciler] Clustering ${unassignedTabs.length} remaining tabs.`);
+      console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);
 
-      // Group unassigned tabs by domain / category
-      const domainClusters = new Map();
-      for (const tab of unassignedTabs) {
-        let domainKey = 'Other';
-        try {
-          if (tab.url) {
-            const u = new URL(tab.url);
-            domainKey = u.hostname.replace(/^www\./, '');
-          }
-        } catch {
-          domainKey = 'Other';
-        }
-
-        if (domainKey.includes('reddit.com')) {
-          domainKey = 'Reddit';
-        } else if (domainKey.includes('wiki') || domainKey.includes('fandom') || domainKey.includes('gamepedia')) {
-          domainKey = 'Wiki';
-        } else if (domainKey.includes('github') || domainKey.includes('gitlab')) {
-          domainKey = 'Code';
-        } else if (domainKey.includes('youtube') || domainKey.includes('twitch')) {
-          domainKey = 'Video';
-        }
-
-        if (!domainClusters.has(domainKey)) {
-          domainClusters.set(domainKey, []);
-        }
-        domainClusters.get(domainKey).push(tab);
-      }
-
-      const remainderTabs = [];
-
-      for (const [domain, tabs] of domainClusters.entries()) {
-        const cleanTitle = cleanAndShortenTitle(domain);
-        if (tabs.length >= 3) {
-          plan.groups.push({
-            title: cleanTitle,
-            color: 'blue',
-            rationale: `Clustered ${tabs.length} tabs from ${domain}`,
-            tabIds: tabs.map(t => t.tabId)
-          });
-        } else {
-          remainderTabs.push(...tabs);
-        }
-      }
-
-      // Consolidate small remainders into Other
-      if (remainderTabs.length > 0) {
-        plan.groups.push({
-          title: 'Other',
-          color: 'grey',
-          rationale: 'Standalone reference tabs',
-          tabIds: remainderTabs.map(t => t.tabId)
-        });
-      }
+      // Route all unassigned tabs into Other group
+      plan.groups.push({
+        title: 'Other',
+        color: 'grey',
+        rationale: 'Unassigned or standalone reference tabs',
+        tabIds: unassignedTabs.map(t => t.tabId)
+      });
     }
 
-    // Step 1: Merge duplicates and synonyms (e.g. Music+Music+Songsterr -> Music, Code+Coding -> Code)
+    // Step 1: Merge duplicates
     // Step 2: Enforce >2 tabs per group constraint across the entire plan
     plan.groups = consolidateSmallGroups(plan.groups, 3);
 
