@@ -3,12 +3,12 @@ id: doc-1
 title: Reference validation session
 type: guide
 created_date: '2026-08-15 11:19'
-updated_date: '2026-08-15 11:19'
+updated_date: '2026-08-15 11:48'
 tags:
   - validation
   - testing
 ---
-There is no automated test suite in this repo. Validation is manual, against gemma 12B on Ollama (see decision-12). This document is the reference test plan that every P0 and P1 task validates against.
+There is no automated test suite in this repo. Validation is manual, against gemma 12B on Ollama (see decision-12). This document is the reference test plan that every task in milestones m-0 and m-1 validates against.
 
 ## Set up a deliberate test session
 

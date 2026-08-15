@@ -14,4 +14,4 @@ Delete the table entirely. Replace it with a non-destructive sanitizer whose onl
 
 ## Consequences
 
-The single highest-impact change in the P0 epic. Until it lands, no prompt or model work can change the output. mergeDuplicateGroups must be rewritten to merge only on normalized title equality; semantic overlap moves to the validator in TASK-1.7. Implemented by TASK-1.1.
+The single highest-impact change in TASK-1. Until it lands, no prompt or model work can change the output. mergeDuplicateGroups must be rewritten to merge only on normalized title equality; semantic overlap moves to the validator in TASK-1.7. Implemented by TASK-1.1.

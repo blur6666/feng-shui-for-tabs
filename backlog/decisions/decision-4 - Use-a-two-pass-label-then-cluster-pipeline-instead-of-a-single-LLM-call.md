@@ -14,4 +14,4 @@ Split into two passes: pass 1 labels each tab in batches of roughly 20, returnin
 
 ## Consequences
 
-Each call stays small and reliable regardless of tab count, and pass 2 operates on clean semantic labels instead of raw page noise. The pass 2 payload drops to roughly 20 tokens per tab. Adds an orchestration layer and more total calls. This is the core architectural decision of the P0 epic; TASK-1.5 implements it and several other tasks depend on its output fields.
+Each call stays small and reliable regardless of tab count, and pass 2 operates on clean semantic labels instead of raw page noise. The pass 2 payload drops to roughly 20 tokens per tab. Adds an orchestration layer and more total calls. This is the core architectural decision of TASK-1; TASK-1.5 implements it and several other tasks depend on its output fields.

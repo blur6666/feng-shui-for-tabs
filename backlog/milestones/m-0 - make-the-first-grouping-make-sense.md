@@ -1,6 +1,6 @@
 ---
 id: m-0
-title: "P0: Make the first grouping make sense"
+title: "Make the first grouping make sense"
 ---
 
 ## Description

@@ -1,6 +1,6 @@
 ---
 id: decision-11
-title: Defer interactive refinement to P2 until the first grouping is trustworthy
+title: Defer interactive refinement until the first grouping is trustworthy
 date: '2026-08-15 11:16'
 status: accepted
 ---
@@ -10,7 +10,7 @@ Interactive per-group refinement with rules that persist across runs is valuable
 
 ## Decision
 
-Defer refinement to P2. Build it only once the first grouping is good. When built, accepted refinements persist as durable rules injected into future prompts.
+Defer refinement to milestone m-2. Build it only once the first grouping is good. When built, accepted refinements persist as durable rules injected into future prompts.
 
 ## Consequences
 

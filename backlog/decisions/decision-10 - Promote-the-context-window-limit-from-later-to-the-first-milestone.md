@@ -1,6 +1,6 @@
 ---
 id: decision-10
-title: Promote the context-window limit from later to P0
+title: Promote the context-window limit from later to the first milestone
 date: '2026-08-15 11:16'
 status: accepted
 ---
@@ -10,7 +10,7 @@ _callOllama hardcoded num_ctx to 16384 in background/llm-adapter.js. 250 tabs di
 
 ## Decision
 
-Promote the context budget to P0.
+Promote the context budget into milestone m-0, alongside the grouping fixes.
 
 ## Consequences
 

@@ -3,12 +3,11 @@ id: doc-2
 title: 'Root cause analysis: why tabs group by site'
 type: specification
 created_date: '2026-08-15 11:19'
-updated_date: '2026-08-15 11:19'
+updated_date: '2026-08-15 11:48'
 tags:
   - analysis
-  - p0
 ---
-Why the extension groups tabs by *site* instead of *subject*. Read this before starting any task in the P0 epic (TASK-1).
+Why the extension groups tabs by *site* instead of *subject*. Read this before starting any task under TASK-1.
 
 The models were mostly innocent. Three layers force site-based grouping, and the last two **override whatever the LLM returns**.
 
