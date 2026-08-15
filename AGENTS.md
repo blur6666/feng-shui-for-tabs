@@ -25,8 +25,7 @@ Do not edit Backlog task, draft, document, decision, or milestone markdown files
 
 ## Environment & Tooling Guardrails
 
-### Windows PowerShell & GitHub CLI
-- **GitHub CLI Path**: On Windows, if `gh` is not found in the current session PATH, use `& "C:\Program Files\GitHub CLI\gh.exe"`.
+### Windows PowerShell & CLI Tools
 - **Markdown Payloads**: When passing multiline or markdown text (containing backticks or quotes) to CLI tools (such as `gh pr comment` or `gh pr review`), write the content to a file and pass `-F <path>` to avoid PowerShell backtick escape parsing errors.
 
 ## Architectural Invariants for Tab Organizing Pipeline
