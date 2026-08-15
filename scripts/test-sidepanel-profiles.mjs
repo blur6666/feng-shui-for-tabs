@@ -154,4 +154,14 @@ const renderedRowHtml = `
 assert.ok(!renderedRowHtml.includes('\'\'\' alt=""'), 'Rendered HTML must not have broken alt string');
 assert.ok(renderedRowHtml.includes('onerror="this.onerror=null;this.src='), 'Rendered HTML must have safe onerror');
 
+// Test Cancel Plan Button (TASK-23)
+const btnCancelPlan = elements.get('btn-cancel-plan');
+assert.ok(btnCancelPlan, 'btn-cancel-plan element must exist');
+assert.ok(btnCancelPlan.listeners.click?.length > 0, 'btn-cancel-plan must have click listener');
+
+// Trigger cancel proposed plan
+btnCancelPlan.listeners.click[0]();
+assert.equal(elements.get('results-container').classList.contains('hidden'), true);
+assert.equal(elements.get('footer-actions').classList.contains('hidden'), true);
+
 console.log('Sidepanel progress, throttling, cancellation, diagnostics, and no-selector checks passed');

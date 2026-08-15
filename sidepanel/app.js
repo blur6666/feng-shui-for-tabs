@@ -54,6 +54,7 @@ const elements = {
   groupsList: document.getElementById('groups-list'),
   footerActions: document.getElementById('footer-actions'),
   btnApply: document.getElementById('btn-apply'),
+  btnCancelPlan: document.getElementById('btn-cancel-plan'),
   btnUndo: document.getElementById('btn-undo'),
   btnSaveSettings: document.getElementById('btn-save-settings'),
   btnTestConnection: document.getElementById('btn-test-connection'),
@@ -333,6 +334,9 @@ function setupEventListeners() {
   // Analyze Button
   elements.btnAnalyze.addEventListener('click', startAnalysis);
   elements.btnCancelAnalysis?.addEventListener('click', cancelAnalysis);
+
+  // Cancel Proposed Plan Button
+  elements.btnCancelPlan?.addEventListener('click', cancelProposedPlan);
 
   // Apply Groups Button
   elements.btnApply.addEventListener('click', applyTabGroups);
@@ -671,6 +675,8 @@ function categorizeActions(actions) {
 function renderResults(plan) {
   elements.resultsContainer.classList.remove('hidden');
   elements.footerActions.classList.remove('hidden');
+  elements.btnCancelPlan?.classList.remove('hidden');
+  elements.btnUndo?.classList.add('hidden');
 
   // 1. Summary
   elements.resultsSummary.textContent = plan.summary || 'Tabs organized into coherent semantic clusters.';
@@ -949,6 +955,15 @@ function renderGroupsList(groups) {
   });
 }
 
+// Cancel Proposed Tab Groups Preview
+function cancelProposedPlan() {
+  appState.plan = null;
+  elements.resultsContainer.classList.add('hidden');
+  elements.footerActions.classList.add('hidden');
+  elements.groupsList.innerHTML = '';
+  elements.actionsList.innerHTML = '';
+}
+
 // Apply Tab Groups to Chrome
 async function applyTabGroups() {
   if (!appState.plan) return;
@@ -971,6 +986,9 @@ async function applyTabGroups() {
 
     if (response && response.success) {
       elements.btnApply.textContent = '✓ Groups Applied!';
+      elements.btnCancelPlan?.classList.add('hidden');
+      elements.btnUndo?.classList.remove('hidden');
+      elements.btnUndo.disabled = false;
       setTimeout(() => {
         elements.btnApply.textContent = 'Apply Groups';
         elements.btnApply.disabled = false;
@@ -996,6 +1014,9 @@ async function undoTabGroups() {
 
     if (response && response.success) {
       alert('✓ Previous tab organization restored.');
+      elements.btnUndo?.classList.add('hidden');
+      elements.footerActions.classList.add('hidden');
+      elements.resultsContainer.classList.add('hidden');
       await refreshTabStats();
     } else {
       throw new Error(response?.error || 'No snapshot found to undo');
