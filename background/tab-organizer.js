@@ -178,8 +178,19 @@ export function mergeDuplicateGroups(groups) {
 }
 
 /**
- * Ensures every group has >2 tabs (at least 3 tabs).
- * Merges smaller groups (1-2 tabs) and consolidates 'Other'.
+ * Maps a granularity level to the minimum group size enforced locally.
+ * Broad and Detailed allow 2-tab groups; Balanced keeps the 3-tab minimum.
+ * @param {string} granularity 'broad' | 'balanced' | 'detailed'
+ * @returns {number}
+ */
+export function granularityToMinSize(granularity) {
+  if (granularity === 'broad' || granularity === 'detailed') return 2;
+  return 3;
+}
+
+/**
+ * Ensures every group has at least minSize tabs (default 3).
+ * Merges smaller groups and consolidates 'Other'.
  */
 export function consolidateSmallGroups(groups, minSize = 3) {
   if (!groups || groups.length === 0) return [];
@@ -285,12 +296,16 @@ export class TabOrganizer {
    */
   static async applyGroupingPlan(plan, options = {}) {
     const { consolidation = 'in_place' } = options;
+    // Honor the granularity the preview was reconciled with so Apply cannot re-merge
+    // 2-tab Broad/Detailed groups back to the Balanced 3-tab minimum.
+    const granularity = options.granularity || plan?.granularity || 'balanced';
+    const minSize = granularityToMinSize(granularity);
 
     // 1. Take Snapshot first
     await this.captureSnapshot();
 
-    // 2. Filter, deduplicate titles, consolidate small groups (>2 tabs) & alternate colors
-    let groups = consolidateSmallGroups(plan.groups || [], 3);
+    // 2. Filter, deduplicate titles, consolidate small groups (granularity min size) & alternate colors
+    let groups = consolidateSmallGroups(plan.groups || [], minSize);
     applyAlternatingColors(groups);
 
     const results = [];
@@ -358,8 +373,8 @@ export class TabOrganizer {
       }
     }
 
-    // Handle suggested actions: Close duplicates if explicitly permitted
-    if (options.closeDuplicates && plan.suggestedActions) {
+    // Handle suggested actions: Close duplicates ONLY IF explicitly requested
+    if (options.closeDuplicates === true && plan.suggestedActions) {
       for (const act of plan.suggestedActions) {
         if (act.action === 'close_duplicate' && act.tabId) {
           try {
@@ -452,9 +467,10 @@ export class TabOrganizer {
    * 3. Every title is at most 12 characters and has NO emojis.
    * 4. Adjacent groups have strictly alternating contrasting colors.
    */
-  static reconcilePlanWithRawTabs(plan, rawTabs) {
+  static reconcilePlanWithRawTabs(plan, rawTabs, granularity = 'balanced') {
     if (!plan) plan = { groups: [] };
     if (!plan.groups) plan.groups = [];
+    const minSize = granularityToMinSize(granularity);
 
     const assignedTabIds = new Set();
     plan.groups.forEach(g => {
@@ -476,11 +492,14 @@ export class TabOrganizer {
     }
 
     // Step 1: Merge duplicates
-    // Step 2: Enforce >2 tabs per group constraint across the entire plan
-    plan.groups = consolidateSmallGroups(plan.groups, 3);
+    // Step 2: Enforce the granularity minimum tab count across the entire plan
+    plan.groups = consolidateSmallGroups(plan.groups, minSize);
 
     // Step 3: Enforce strictly alternating colors across all groups
     applyAlternatingColors(plan.groups);
+
+    // Step 4: Persist the granularity on the plan so the Apply path enforces the same min size
+    plan.granularity = granularity;
 
     return plan;
   }

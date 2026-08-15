@@ -114,8 +114,93 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
     }
   }
 
+  const redundancyActions = detectSemanticRedundancies(allCleanLabeled);
+
   return {
     labeledTabs: allCleanLabeled,
-    junkActions: allJunkActions
+    junkActions: allJunkActions,
+    redundancyActions
   };
 }
+
+// Subjects too generic to imply redundancy when no entity is present.
+const GENERIC_SUBJECTS = new Set(['reference', 'home', 'login', 'sign in', 'signin', 'new tab', 'untitled', 'about']);
+
+const MIN_EMPTY_ENTITY_SUBJECT_LENGTH = 12;
+
+// Words ending in 's' that are not simple plurals (false-positive guard for near-match).
+const NON_PLURAL_S_WORDS = new Set(['news', 'lens', 'series', 'species', 'does', 'goes', 'chaos']);
+
+/**
+ * Normalizes a label for near-match comparison (trim, lowercase, conservative singularization).
+ * Only strips a plural 's' where it is safe; irregular and false-positive forms are left intact
+ * so distinct labels ('news' vs 'new', 'class' vs 'clas', 'analysis' vs 'analysi') never collapse.
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeLabel(value) {
+  const normalized = (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (normalized.length <= 3) return normalized;                            // gas, bus, was, his, is, us
+  if (NON_PLURAL_S_WORDS.has(normalized)) return normalized;                // news, lens, series, species, does, goes, chaos
+  if (/(ss|us|is|as)$/.test(normalized)) return normalized;                 // class, status, analysis, alias
+  if (/(x|ch|sh|ss|z|o)es$/.test(normalized)) return normalized.slice(0, -2); // boxes -> box, watches -> watch, addresses -> address, heroes -> hero
+  if (normalized.endsWith('s')) return normalized.slice(0, -1);             // reviews -> review, air fryers -> air fryer, cookies -> cookie, videos -> video
+  return normalized;
+}
+
+/**
+ * Detects semantic redundancy across labeled tabs without additional LLM calls.
+ * Flags tabs that share the same entity and near-identical subjects, plus
+ * specific subject-only matches when the entity is empty but the subject is
+ * specific enough to avoid generic false positives.
+ * @param {Array<object>} labeledTabs
+ * @returns {Array<object>} redundancyActions
+ */
+export function detectSemanticRedundancies(labeledTabs = []) {
+  const redundancyActions = [];
+  const seenMap = new Map();
+
+  for (const tab of labeledTabs) {
+    const normSub = normalizeLabel(tab.subject);
+    const normEnt = normalizeLabel(tab.entity);
+    if (!normSub && !normEnt) continue;
+
+    let isRedundant = false;
+    let matchedTabId = null;
+    let matchKey = null;
+
+    if (normEnt) {
+      // Entity present: subject near-match + exact entity is strong signal.
+      matchKey = `ent:${normEnt}:::sub:${normSub}`;
+      if (seenMap.has(matchKey)) {
+        isRedundant = true;
+        matchedTabId = seenMap.get(matchKey);
+      }
+    } else {
+      // Empty entity: only flag specific subjects, never generic fallbacks.
+      if (normSub.length >= MIN_EMPTY_ENTITY_SUBJECT_LENGTH && !GENERIC_SUBJECTS.has(normSub)) {
+        matchKey = `sub:${normSub}`;
+        if (seenMap.has(matchKey)) {
+          isRedundant = true;
+          matchedTabId = seenMap.get(matchKey);
+        }
+      }
+    }
+
+    if (isRedundant && matchedTabId !== null && matchKey !== null) {
+      redundancyActions.push({
+        action: 'semantic_redundancy',
+        tabId: tab.id,
+        targetTabId: matchedTabId,
+        junkType: 'redundant',
+        reason: `Redundant content: "${tab.subject || tab.entity}" (matches Tab #${matchedTabId})`
+      });
+    } else if (matchKey !== null) {
+      seenMap.set(matchKey, tab.id);
+    }
+  }
+
+  return redundancyActions;
+}
+
+

@@ -22,8 +22,8 @@ export function normalizeUrl(rawUrl) {
   }
 }
 
-// Re-export isScriptableUrl from shared junk-rules
-export { isScriptableUrl } from '../shared/junk-rules.js';
+import { isScriptableUrl, isBlockedByPrivacy } from '../shared/junk-rules.js';
+export { isScriptableUrl, isBlockedByPrivacy };
 
 // Timeout wrapper so no single tab script can ever hang the collection
 function withTimeout(promise, ms, fallbackValue = null) {
@@ -74,7 +74,8 @@ export async function collectAllTabs(options = {}, onProgress = null) {
   const {
     scope = 'all_windows', // 'all_windows' | 'current_window'
     extractReadability = true,
-    skipPinned = false
+    skipPinned = false,
+    privacyBlocklist = []
   } = options;
 
   let windows = [];
@@ -85,12 +86,17 @@ export async function collectAllTabs(options = {}, onProgress = null) {
     windows = await chrome.windows.getAll({ populate: true });
   }
 
-  // Flatten tabs with window context
+  // Flatten tabs with window context (excluding privacy-shielded tabs)
   const rawTabs = [];
+  let shieldedTabs = 0;
   for (const win of windows) {
     if (win.type !== 'normal') continue;
     for (const tab of win.tabs || []) {
       if (skipPinned && tab.pinned) continue;
+      if (isBlockedByPrivacy(tab.url, privacyBlocklist)) {
+        shieldedTabs++;
+        continue;
+      }
       rawTabs.push({
         ...tab,
         windowFocused: win.focused
@@ -169,6 +175,7 @@ export async function collectAllTabs(options = {}, onProgress = null) {
     windows: windows.map(w => ({ id: w.id, focused: w.focused, tabCount: w.tabs?.length || 0 })),
     tabs: tabRecords,
     duplicateActions,
-    totalTabs
+    totalTabs,
+    shieldedTabs
   };
 }

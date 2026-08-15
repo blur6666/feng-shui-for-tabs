@@ -156,6 +156,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           const tabData = await collectAllTabs({
             scope: mergedSettings.grouping?.scope || 'all_windows',
+            privacyBlocklist: mergedSettings.privacyBlocklist || [],
             extractReadability: mergedSettings.grouping?.extractReadability !== false,
             skipPinned: false
           }, (completed, total) => {
@@ -179,7 +180,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const distilled = distillTabsForPrompt(tabData.tabs, { maxSnippetLength: 220 });
 
           // Step 3: Pass 1 - Batched Semantic Labeling
-          const { labeledTabs, junkActions } = await labelTabsInBatches(
+          const { labeledTabs, junkActions, redundancyActions } = await labelTabsInBatches(
             distilled,
             mergedSettings,
             (progress) => {
@@ -193,7 +194,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Step 4: Pass 2 - Synthesize & Cluster Clean Labeled Tabs
           let plan;
           if (labeledTabs.length > 0) {
-            const clusterPrompt = constructClusteringPrompt(labeledTabs, payload?.customInstructions || '');
+            const clusterPrompt = constructClusteringPrompt(labeledTabs, payload?.customInstructions || '', payload?.granularity || 'balanced');
             const estimatedTokens = estimateTokens(clusterPrompt + '\n' + (SYSTEM_PROMPT || ''));
             const maxContext = Number(mergedSettings.ollama?.num_ctx) || 32768;
 
@@ -249,12 +250,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           // Step 5: Reconcile and guarantee 100% tab grouping coverage
-          const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs);
+          const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs, payload?.granularity || 'balanced');
 
-          // Merge suggested actions: junk tabs and duplicates (deduplicated by tabId)
+          // Merge suggested actions: junk tabs, duplicates, and semantic redundancies (deduplicated by tabId)
           const combinedActions = [
             ...(completePlan.suggestedActions || []),
             ...(junkActions || []),
+            ...(redundancyActions || []),
             ...(tabData.duplicateActions || [])
           ];
           const seenActionTabs = new Set();
@@ -270,7 +272,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             success: true,
             plan: completePlan,
             rawTabs: tabData.tabs,
-            totalTabs: tabData.totalTabs
+            totalTabs: tabData.totalTabs,
+            shieldedTabs: tabData.shieldedTabs || 0
           });
           break;
         }
@@ -278,7 +281,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Apply Tab Groups Plan
         case MESSAGE_TYPES.APPLY_GROUPS: {
           const { plan, options } = payload;
-          const result = await TabOrganizer.applyGroupingPlan(plan, options);
+          const applyOptions = {
+            ...(options || {}),
+            granularity: options?.granularity || payload?.granularity || plan?.granularity || 'balanced'
+          };
+          const result = await TabOrganizer.applyGroupingPlan(plan, applyOptions);
           sendResponse(result);
           break;
         }
