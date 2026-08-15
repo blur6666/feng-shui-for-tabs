@@ -101,4 +101,47 @@ const validationDomainGroup = validateGroupingPlan({
 assert.equal(validationDomainGroup.valid, false);
 assert.ok(validationDomainGroup.violations.some(v => v.includes('wikipedia.org') && v.includes('distinct subjects')));
 
+// Case 9: Unassigned tabs with keywords matching existing group titles (e.g. Codex tabs matching OpenCodex)
+const initialCodexPlan = {
+  summary: 'AI tools',
+  groups: [
+    { title: 'Claude Code', label: 'Claude Code CLI', tabIds: [1, 2] },
+    { title: 'OpenCodex', label: 'OpenCodex Provider', tabIds: [3, 4] },
+    { title: 'ChatGPT', label: 'ChatGPT Tools', tabIds: [5, 6] }
+  ]
+};
+
+const fullTabSet = [
+  { tabId: 1, title: 'Am I using Claude Code wrong', url: 'https://reddit.com/r/claude' },
+  { tabId: 2, title: 'Claude Code | opencodex', url: 'https://opencodex.me' },
+  { tabId: 3, title: 'opencodex not loading on claude cli - Kagi Search', url: 'https://kagi.com/search' },
+  { tabId: 4, title: 'lidge-jun/opencodex: Universal provider proxy for OpenAI Codex', url: 'https://github.com/opencodex' },
+  { tabId: 5, title: 'Codex in ChatGPT | AI Coding Agents for Software Engineering', url: 'https://chatgpt.com/g/codex' },
+  { tabId: 6, title: 'Permissions | ChatGPT Learn', url: 'https://learn.chatgpt.com' },
+  { tabId: 7, title: 'Extensions', url: 'chrome://extensions' },
+  { tabId: 8, title: 'Beat The Meatles', url: 'https://reddit.com/r/music' },
+  { tabId: 9, title: 'API keys | Google AI Studio', url: 'https://aistudio.google.com' },
+  { tabId: 10, title: 'PSA: Low Latency Profile on Windows', url: 'https://reddit.com/r/windows' },
+  { tabId: 11, title: 'How do I make original music : r/musicproduction', url: 'https://reddit.com/r/musicproduction' },
+  { tabId: 12, title: 'Windows: Codex CLI integration fails with spawnSync codex ENOENT', url: 'https://github.com/issue/12' },
+  { tabId: 13, title: 'codex getting started - Kagi Search', url: 'https://kagi.com/search?q=codex' },
+  { tabId: 14, title: 'Complete Beginners Guide to OpenAIs Codex App', url: 'https://getpushtoprod.substack.com/p/codex' }
+];
+
+const reconciledCodex = TabOrganizer.reconcilePlanWithRawTabs(initialCodexPlan, fullTabSet, 'balanced');
+const openCodexGroup = reconciledCodex.groups.find(g => g.title.toLowerCase().includes('opencodex') || g.title.toLowerCase().includes('codex'));
+assert.ok(openCodexGroup, 'OpenCodex group must exist');
+assert.ok(openCodexGroup.tabIds.includes(12), 'Tab 12 (Codex CLI ENOENT) must be merged into OpenCodex group');
+assert.ok(openCodexGroup.tabIds.includes(13), 'Tab 13 (codex getting started) must be merged into OpenCodex group');
+assert.ok(openCodexGroup.tabIds.includes(14), 'Tab 14 (Codex App) must be merged into OpenCodex group');
+
+// Case 10: Unassigned tabs sharing a topic (Music tabs 8 and 11) form a topic group
+const musicGroup = reconciledCodex.groups.find(g => g.title.toLowerCase().includes('music'));
+assert.ok(musicGroup, 'A topic group for Music must be created for tabs 8 & 11 rather than dumping them into Other');
+assert.ok(musicGroup.tabIds.includes(8) || musicGroup.tabIds.includes(11));
+
+const otherGroup = reconciledCodex.groups.find(g => g.title === 'Other');
+const otherCount = otherGroup ? otherGroup.tabIds.length : 0;
+assert.ok(otherCount < 5, `Expected fewer than 5 tabs in Other, got ${otherCount}`);
+
 console.log('Reconciliation robustness tests passed');

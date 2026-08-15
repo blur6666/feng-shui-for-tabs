@@ -199,9 +199,8 @@ CRITICAL GROUPING & TAXONOMY RULES:
 2. Group titles MUST be <= 12 characters and 1-2 words. Abbreviate if needed (e.g. 'Air Fryer', 'Rust Bugs', 'Tokyo Trip', 'ML AirFryer').
 3. Include a "label" property with the full unabbreviated topic name for tooltips (e.g. "Philips Air Fryer Research").
 4. STRICTLY NO EMOJIS in group titles or labels.
-5. Minimum 3 tabs per group. Never create 1 or 2 tab groups. Merge small topics into broader groups or 'Other'.
-6. Every valid tab ID must appear in exactly one group.
-7. Return ONLY a valid JSON object matching the JSON schema.`;
+5. Every single input tab ID MUST be assigned to its most relevant semantic topic group. Never create generic 'Other' or 'Misc' groups. If a tab is a standalone topic, assign it a specific, descriptive topic group.
+6. Return ONLY a valid JSON object matching the JSON schema.`;
 
 export const SYSTEM_PROMPT = CLUSTERING_SYSTEM_PROMPT;
 
@@ -252,7 +251,6 @@ export const JSON_SCHEMA = {
             description: "Full descriptive topic label, e.g., 'Philips Air Fryer Research'"
           },
           color: {
-            type: "string",
             enum: CHROME_TAB_COLORS
           },
           rationale: {

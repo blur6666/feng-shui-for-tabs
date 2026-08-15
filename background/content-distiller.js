@@ -32,6 +32,7 @@ function compactLabelingRecord(tab) {
 
 function compactClusteringRecord(tab) {
   const record = { i: tab.id, s: truncate(tab.subject, 100) || 'Topic' };
+  if (tab.title && tab.title !== tab.subject) record.t = truncate(tab.title, 80);
   if (tab.entity) record.e = truncate(tab.entity, 100);
   if (tab.intent) record.n = truncate(tab.intent, 48);
   return record;
@@ -128,7 +129,7 @@ export function constructClusteringPrompt(labeledTabs, userInstructions = '', gr
   const fast = isFastProfile(profile);
   const payload = fast ? labeledTabs.map(compactClusteringRecord) : labeledTabs;
   const tabJsonString = JSON.stringify(payload);
-  const evidenceLegend = fast ? 'Input keys: i tab ID, s subject, e entity, n intent.\n' : '';
+  const evidenceLegend = fast ? 'Input keys: i tab ID, s subject, t title hint, e entity, n intent.\n' : '';
 
   let granularityRule = '';
   if (granularity === 'broad') {
@@ -140,7 +141,7 @@ export function constructClusteringPrompt(labeledTabs, userInstructions = '', gr
   }
 
   const customRule = userInstructions?.trim() ? `User focus: "${userInstructions.trim()}"\n` : '';
-  return `${evidenceLegend}${customRule}Cluster ${labeledTabs.length} semantic tab labels into subject/task groups. TABS=${tabJsonString}\n\n${granularityRule}\nGroup strictly by topic/task, not host or domain. Every input tab ID must be assigned to its relevant topic group. Do not group all tabs into 'Other' or 'Misc'. Titles must be 1-2 words and <=12 characters; label is the full descriptive topic; no emojis; use alternating Chrome colors.\nReturn only JSON: {"summary":"Brief active-work summary","groups":[{"title":"Air Fryer","label":"Air Fryer Research","color":"blue","rationale":"Product listings and reviews","tabIds":[1,2,3]}]}`;
+  return `${evidenceLegend}${customRule}Cluster ${labeledTabs.length} semantic tab labels into subject/task groups. TABS=${tabJsonString}\n\n${granularityRule}\nGroup strictly by topic/task, not host or domain. Every input tab ID must be assigned to its relevant topic group. Do not create 'Other' or 'Misc' groups. Titles must be 1-2 words and <=12 characters; label is the full descriptive topic; no emojis; use alternating Chrome colors.\nReturn only JSON: {"summary":"Brief active-work summary","groups":[{"title":"Air Fryer","label":"Air Fryer Research","color":"blue","rationale":"Product listings and reviews","tabIds":[1,2,3]}]}`;
 }
 
 /**

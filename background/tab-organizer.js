@@ -278,6 +278,23 @@ export function normalizePlanGroups(plan, validTabIds = null) {
   };
 }
 
+const STOPWORDS = new Set([
+  'and', 'the', 'for', 'with', 'from', 'this', 'that', 'how', 'what', 'why',
+  'app', 'site', 'page', 'tab', 'tabs', 'group', 'groups', 'com', 'org', 'net',
+  'http', 'https', 'www', 'you', 'your', 'about', 'guide', 'into', 'using',
+  'does', 'help', 'search', 'home', 'main', 'view', 'post', 'thread', 'reddit',
+  'kagi', 'google', 'github', 'youtube'
+]);
+
+export function extractKeywords(text) {
+  if (!text || typeof text !== 'string') return [];
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 3 && !STOPWORDS.has(word));
+}
+
 /**
  * Ensures every group has at least minSize tabs (default 3).
  * Merges smaller groups and consolidates 'Other' without destroying the entire plan.
@@ -302,14 +319,9 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     }
   }
 
-  // Guard against collapsing the entire plan into 'Other':
-  // If no group met minSize, or if >50% of total tabs would end up in 'Other',
-  // keep 2-tab groups rather than destroying the user's entire tab organization.
-  const totalTabs = merged.reduce((sum, g) => sum + g.tabIds.length, 0);
-  const smallTabsCount = smallGroups.reduce((sum, g) => sum + g.tabIds.length, 0);
-
+  // Preserve 2-tab groups with semantic topic titles rather than destroying them into 'Other'
   for (const small of smallGroups) {
-    if (small.tabIds.length >= 2 && (validGroups.length === 0 || (smallTabsCount + leftoverTabIds.length) / Math.max(1, totalTabs) > 0.5)) {
+    if (small.tabIds.length >= 2) {
       validGroups.push(small);
     } else {
       leftoverTabIds.push(...small.tabIds);
@@ -320,6 +332,7 @@ export function consolidateSmallGroups(groups, minSize = 3) {
   if (leftoverTabIds.length > 0) {
     validGroups.push({
       title: 'Other',
+      label: 'Other',
       color: 'grey',
       rationale: 'Unassigned or standalone reference tabs',
       tabIds: leftoverTabIds
@@ -587,64 +600,138 @@ export class TabOrganizer {
     if (unassignedTabs.length > 0) {
       console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);
 
-      // Cluster unassigned tabs by domain if there are multiple tabs from same domain
-      const unassignedDomainMap = new Map();
-      const trueOrphans = [];
+      const rawTabMap = new Map((rawTabs || []).map(t => [t.tabId ?? t.id, t]));
 
+      // Build keyword profiles for existing groups
+      const groupProfiles = normalizedPlan.groups.map(grp => {
+        const titleTokens = extractKeywords(grp.title);
+        const labelTokens = extractKeywords(grp.label);
+        const rationaleTokens = extractKeywords(grp.rationale);
+        const assignedTabTokens = (grp.tabIds || []).flatMap(id => {
+          const tab = rawTabMap.get(id);
+          return tab ? extractKeywords(tab.title) : [];
+        });
+        const allKeywords = new Set([
+          ...titleTokens,
+          ...labelTokens,
+          ...rationaleTokens,
+          ...assignedTabTokens
+        ]);
+        return {
+          group: grp,
+          cleanTitle: cleanAndShortenTitle(grp.title).toLowerCase(),
+          keywords: allKeywords
+        };
+      });
+
+      const remainingUnassigned = [];
+
+      // Step 1: Semantic matching of unassigned tabs into existing groups
       for (const tab of unassignedTabs) {
-        let domain = '';
-        try {
-          if (tab.url) domain = new URL(tab.url).hostname.replace(/^www\./, '');
-        } catch {
-          domain = '';
-        }
+        const tabId = tab.tabId ?? tab.id;
+        const tabTokens = new Set([
+          ...extractKeywords(tab.title),
+          ...extractKeywords(tab.subject),
+          ...extractKeywords(tab.entity),
+          ...extractKeywords(tab.url)
+        ]);
 
-        // Check if domain matches an existing group
-        let matchedExisting = false;
-        if (domain) {
-          for (const grp of normalizedPlan.groups) {
-            const cleanTitle = cleanAndShortenTitle(grp.title).toLowerCase();
-            if (cleanTitle && (domain.includes(cleanTitle) || cleanTitle.includes(domain.split('.')[0]))) {
-              grp.tabIds.push(tab.tabId);
-              assignedTabIds.add(tab.tabId);
-              matchedExisting = true;
-              break;
+        let bestGroup = null;
+        let bestScore = 0;
+
+        for (const profile of groupProfiles) {
+          let score = 0;
+          const lowerTitle = (tab.title || '').toLowerCase();
+          const lowerUrl = (tab.url || '').toLowerCase();
+
+          // High-confidence title or URL substring match against group title
+          if (profile.cleanTitle && profile.cleanTitle.length >= 3 && profile.cleanTitle !== 'other') {
+            if (lowerTitle.includes(profile.cleanTitle) || lowerUrl.includes(profile.cleanTitle)) {
+              score += 4;
             }
           }
-        }
 
-        if (!matchedExisting) {
-          if (domain && domain !== 'newtab') {
-            if (!unassignedDomainMap.has(domain)) unassignedDomainMap.set(domain, []);
-            unassignedDomainMap.get(domain).push(tab.tabId);
-          } else {
-            trueOrphans.push(tab.tabId);
+          // Keyword overlap
+          for (const token of tabTokens) {
+            if (profile.keywords.has(token)) {
+              score += 1;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestGroup = profile.group;
           }
         }
-      }
 
-      // Domains with >= 2 unassigned tabs get their own named group
-      for (const [dom, ids] of unassignedDomainMap.entries()) {
-        if (ids.length >= 2) {
-          const domName = dom.split('.')[0];
-          normalizedPlan.groups.push({
-            title: domName.charAt(0).toUpperCase() + domName.slice(1, 12),
-            color: 'cyan',
-            rationale: `Tabs from ${dom}`,
-            tabIds: ids
-          });
+        if (bestGroup && bestScore >= 1) {
+          bestGroup.tabIds.push(tabId);
+          assignedTabIds.add(tabId);
         } else {
-          trueOrphans.push(...ids);
+          remainingUnassigned.push(tab);
         }
       }
 
-      if (trueOrphans.length > 0) {
-        normalizedPlan.groups.push({
-          title: 'Other',
-          color: 'grey',
-          rationale: 'Unassigned or standalone reference tabs',
-          tabIds: trueOrphans
-        });
+      // Step 2: Semantic topic clustering for remaining unassigned tabs
+      if (remainingUnassigned.length > 0) {
+        const clusterMap = new Map();
+
+        for (const tab of remainingUnassigned) {
+          const tokens = new Set([
+            ...extractKeywords(tab.title),
+            ...extractKeywords(tab.subject),
+            ...extractKeywords(tab.entity),
+            ...extractKeywords(tab.url)
+          ]);
+          for (const token of tokens) {
+            if (!clusterMap.has(token)) clusterMap.set(token, []);
+            clusterMap.get(token).push(tab);
+          }
+        }
+
+        const assignedRemainingTabIds = new Set();
+        const sortedClusters = Array.from(clusterMap.entries())
+          .filter(([, tabs]) => tabs.length >= 2)
+          .sort((a, b) => b[1].length - a[1].length);
+
+        for (const [keyword, tabs] of sortedClusters) {
+          const unassignedInCluster = tabs.filter(t => !assignedRemainingTabIds.has(t.tabId ?? t.id));
+          if (unassignedInCluster.length >= 2) {
+            const clusterTitle = keyword.charAt(0).toUpperCase() + keyword.slice(1);
+            const clusterTabIds = unassignedInCluster.map(t => t.tabId ?? t.id);
+            clusterTabIds.forEach(id => assignedRemainingTabIds.add(id));
+
+            normalizedPlan.groups.push({
+              title: cleanAndShortenTitle(clusterTitle),
+              label: clusterTitle,
+              color: 'cyan',
+              rationale: `Grouped by topic (${clusterTitle})`,
+              tabIds: clusterTabIds
+            });
+          }
+        }
+
+        // Step 3: Truly isolated singletons
+        const isolatedTabs = remainingUnassigned.filter(t => !assignedRemainingTabIds.has(t.tabId ?? t.id));
+        if (isolatedTabs.length === 1) {
+          const singleTab = isolatedTabs[0];
+          const singleTitle = cleanAndShortenTitle(singleTab.title || 'Reference');
+          normalizedPlan.groups.push({
+            title: singleTitle,
+            label: singleTitle,
+            color: 'cyan',
+            rationale: `Standalone topic (${singleTitle})`,
+            tabIds: [singleTab.tabId ?? singleTab.id]
+          });
+        } else if (isolatedTabs.length > 1) {
+          normalizedPlan.groups.push({
+            title: 'Other',
+            label: 'Other',
+            color: 'grey',
+            rationale: 'Standalone reference tabs',
+            tabIds: isolatedTabs.map(t => t.tabId ?? t.id)
+          });
+        }
       }
     }
 

@@ -928,14 +928,14 @@ function renderGroupsList(groups) {
         await refreshTabStats();
       });
 
-      const defaultIcon = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
+      const defaultIcon = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3C%2Fsvg%3E';
       const iconUrl = tabData.favIconUrl && !tabData.favIconUrl.startsWith('chrome://') ? tabData.favIconUrl : defaultIcon;
 
       const safeTitle = escapeHtml(tabData.title);
       const safeDomain = escapeHtml(domain);
 
       row.innerHTML = `
-        <img class="tab-favicon" src="${escapeHtml(iconUrl)}" onerror="this.src='${defaultIcon}'" alt="">
+        <img class="tab-favicon" src="${escapeHtml(iconUrl)}" onerror="this.onerror=null;this.src='${defaultIcon}'" alt="">
         <span class="tab-title-text" title="${safeTitle}">${safeTitle}</span>
         ${safeDomain ? `<span class="tab-domain-tag">${safeDomain}</span>` : ''}
       `;
