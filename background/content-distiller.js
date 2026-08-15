@@ -137,7 +137,7 @@ export function constructClusteringPrompt(labeledTabs, userInstructions = '', gr
   } else if (granularity === 'detailed') {
     granularityRule = 'GRANULARITY: DETAILED. Target 8+ focused groups; minimum group size 2.';
   } else {
-    granularityRule = 'GRANULARITY: BALANCED. Target 4-8 coherent groups; minimum group size 3.';
+    granularityRule = 'GRANULARITY: BALANCED. Target 4-8 coherent groups; minimum group size 2.';
   }
 
   const customRule = userInstructions?.trim() ? `User focus: "${userInstructions.trim()}"\n` : '';

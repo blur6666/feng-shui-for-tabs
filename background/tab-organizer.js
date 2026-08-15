@@ -288,11 +288,37 @@ const STOPWORDS = new Set([
 
 export function extractKeywords(text) {
   if (!text || typeof text !== 'string') return [];
-  return text
+  const words = new Set();
+  
+  // 1. Split CamelCase / PascalCase / compound words: "OpenCodex" -> "Open", "Codex"
+  const spaced = text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([a-zA-Z])/g, '$1 $2');
+
+  // 2. Clean and tokenize spaced words
+  const tokens = spaced
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(word => word.length >= 3 && !STOPWORDS.has(word));
+
+  for (const token of tokens) {
+    words.add(token);
+  }
+
+  // 3. Also include original un-split alpha tokens if length >= 3
+  const rawTokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 3 && !STOPWORDS.has(word));
+
+  for (const token of rawTokens) {
+    words.add(token);
+  }
+
+  return Array.from(words);
 }
 
 /**
@@ -651,10 +677,21 @@ export class TabOrganizer {
             }
           }
 
-          // Keyword overlap
+          // Bidirectional keyword and substring matching
           for (const token of tabTokens) {
             if (profile.keywords.has(token)) {
-              score += 1;
+              score += 2;
+            }
+            if (token.length >= 4 && profile.cleanTitle && profile.cleanTitle !== 'other') {
+              if (profile.cleanTitle.includes(token)) {
+                score += 3;
+              }
+            }
+          }
+
+          for (const kw of profile.keywords) {
+            if (kw.length >= 4 && (lowerTitle.includes(kw) || lowerUrl.includes(kw))) {
+              score += 2;
             }
           }
 
@@ -664,7 +701,7 @@ export class TabOrganizer {
           }
         }
 
-        if (bestGroup && bestScore >= 1) {
+        if (bestGroup && bestScore >= 2) {
           bestGroup.tabIds.push(tabId);
           assignedTabIds.add(tabId);
         } else {
@@ -711,25 +748,16 @@ export class TabOrganizer {
           }
         }
 
-        // Step 3: Truly isolated singletons
+        // Step 3: Truly isolated singletons get specific topic titles rather than 'Other'
         const isolatedTabs = remainingUnassigned.filter(t => !assignedRemainingTabIds.has(t.tabId ?? t.id));
-        if (isolatedTabs.length === 1) {
-          const singleTab = isolatedTabs[0];
-          const singleTitle = cleanAndShortenTitle(singleTab.title || 'Reference');
+        for (const singleTab of isolatedTabs) {
+          const singleTitle = cleanAndShortenTitle(singleTab.subject || singleTab.title || 'Reference');
           normalizedPlan.groups.push({
             title: singleTitle,
-            label: singleTitle,
+            label: singleTab.title || singleTitle,
             color: 'cyan',
             rationale: `Standalone topic (${singleTitle})`,
             tabIds: [singleTab.tabId ?? singleTab.id]
-          });
-        } else if (isolatedTabs.length > 1) {
-          normalizedPlan.groups.push({
-            title: 'Other',
-            label: 'Other',
-            color: 'grey',
-            rationale: 'Standalone reference tabs',
-            tabIds: isolatedTabs.map(t => t.tabId ?? t.id)
           });
         }
       }

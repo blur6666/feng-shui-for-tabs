@@ -224,6 +224,7 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
       } else {
         allCleanLabeled.push({
           id: tab.id,
+          title: tab.title || '',
           domain: tab.domain || '',
           url: tab.url || '',
           subject: resolved.subject || tab.title || 'Topic',
