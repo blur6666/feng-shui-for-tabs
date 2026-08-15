@@ -165,6 +165,19 @@ export const MESSAGE_TYPES = {
   TAB_UPDATE_EVENT: 'TAB_UPDATE_EVENT'
 };
 
+/**
+ * Canonical low-value / operational tab classifications shared by prompts, schemas, and local rules.
+ */
+export const JUNK_TYPES = Object.freeze([
+  'new_tab',
+  'extension',
+  'internal',
+  'error',
+  'auth_or_transactional'
+]);
+
+export const JUNK_TYPE_LIST = JUNK_TYPES.map(type => `'${type}'`).join(', ');
+
 export const LABELING_SYSTEM_PROMPT = `You are an expert semantic tab analyzer.
 Your task is to analyze a batch of browser tabs and produce a concise semantic summary for each tab.
 
@@ -173,7 +186,7 @@ For each tab, output:
 - subject: concise description of WHAT THE PAGE IS ABOUT (topic, project, product, problem). NEVER use the website or domain name.
 - entity: primary named entity or product (e.g. 'Philips 5000 Air Fryer', 'Rust Compiler', 'Tokyo Hotel')
 - intent: user goal (e.g. 'research', 'troubleshooting', 'shopping', 'reference')
-- junkType: string if this is low-value/operational ('new_tab', 'extension', 'internal', 'error', 'auth_or_transactional') or null if valuable.
+- junkType: string if this is low-value/operational (one of ${JUNK_TYPE_LIST}) or null if valuable.
 
 Return ONLY a valid JSON object with "tabs": [ ... ].`;
 
@@ -204,7 +217,12 @@ export const LABELING_JSON_SCHEMA = {
           subject: { type: "string" },
           entity: { type: "string" },
           intent: { type: "string" },
-          junkType: { type: ["string", "null"] }
+          junkType: {
+            oneOf: [
+              { type: "string", enum: JUNK_TYPES },
+              { type: "null" }
+            ]
+          }
         },
         required: ["id", "subject"]
       }

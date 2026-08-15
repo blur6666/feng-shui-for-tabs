@@ -3,6 +3,7 @@
  * Compacts and synthesizes tab data into token-efficient payloads for Local LLMs.
  */
 
+import { JUNK_TYPE_LIST } from '../shared/constants.js';
 import { detectJunk } from '../shared/junk-rules.js';
 
 export function distillTabsForPrompt(tabs, options = {}) {
@@ -85,7 +86,7 @@ export function constructLabelingPrompt(batchTabs) {
 1. "subject": Describe WHAT THE PAGE IS ABOUT (task, project, problem, product). NEVER use the website name.
 2. "entity": Specific product or topic name if identifiable.
 3. "intent": User goal (e.g., research, shopping, troubleshooting, reference).
-4. "junkType": Set to 'new_tab', 'extension', 'internal', 'error', or 'auth_or_transactional' if the page is low-value/operational; otherwise null.
+4. "junkType": Set to one of ${JUNK_TYPE_LIST} if the page is low-value/operational; otherwise null.
 5. You MUST return an entry for EVERY tab ID in the batch.
 
 Return JSON matching:

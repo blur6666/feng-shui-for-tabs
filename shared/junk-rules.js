@@ -3,7 +3,9 @@
  * Pure functions for local, deterministic classification of low-value and operational tabs.
  */
 
-export const JUNK_TYPES = ['new_tab', 'extension', 'internal', 'error', 'auth_or_transactional'];
+import { JUNK_TYPES } from './constants.js';
+
+export { JUNK_TYPES };
 
 // Checks if a URL is scriptable by content scripts
 export function isScriptableUrl(url) {
