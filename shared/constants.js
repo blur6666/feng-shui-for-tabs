@@ -125,7 +125,8 @@ export const DEFAULT_SETTINGS = {
   // Local Provider Settings
   ollama: {
     endpoint: 'http://localhost:11434',
-    model: 'qwen2.5:3b',
+    model: 'gemma4:12b',
+    num_ctx: 32768,
     temperature: 0.2
   },
   geminiNano: {
@@ -229,3 +230,11 @@ export const JSON_SCHEMA = {
   },
   required: ["groups"]
 };
+
+/**
+ * Estimates token count from string content (rule of thumb: ~4 chars per token).
+ */
+export function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}

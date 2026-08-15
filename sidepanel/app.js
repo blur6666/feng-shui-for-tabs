@@ -75,6 +75,7 @@ const elements = {
   panelOllama: document.getElementById('settings-panel-ollama'),
   cfgOllamaEndpoint: document.getElementById('cfg-ollama-endpoint'),
   cfgOllamaModel: document.getElementById('cfg-ollama-model'),
+  cfgOllamaNumCtx: document.getElementById('cfg-ollama-num-ctx'),
 
   panelNano: document.getElementById('settings-panel-gemini_nano'),
 
@@ -129,7 +130,8 @@ function updateSettingsUI() {
 
   // Populate Local Inputs
   if (elements.cfgOllamaEndpoint) elements.cfgOllamaEndpoint.value = ollama?.endpoint || 'http://localhost:11434';
-  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'qwen2.5:3b';
+  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'gemma4:12b';
+  if (elements.cfgOllamaNumCtx) elements.cfgOllamaNumCtx.value = ollama?.num_ctx || 32768;
 
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
@@ -327,7 +329,8 @@ function collectSettingsFromModal() {
     },
     ollama: {
       endpoint: elements.cfgOllamaEndpoint?.value.trim() || 'http://localhost:11434',
-      model: elements.cfgOllamaModel?.value.trim() || 'qwen2.5:3b',
+      model: elements.cfgOllamaModel?.value.trim() || 'gemma4:12b',
+      num_ctx: Number(elements.cfgOllamaNumCtx?.value) || 32768,
       temperature: 0.2
     },
     lmStudio: {

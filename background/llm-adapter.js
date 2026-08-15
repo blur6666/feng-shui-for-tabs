@@ -3,7 +3,7 @@
  * Supports Google Gemini, Anthropic Claude, OpenAI, OpenRouter, Groq, Ollama, Chrome Gemini Nano, and LM Studio.
  */
 
-import { PROVIDERS, PROVIDER_METADATA, SYSTEM_PROMPT } from '../shared/constants.js';
+import { PROVIDERS, PROVIDER_METADATA, SYSTEM_PROMPT, estimateTokens } from '../shared/constants.js';
 
 // Helper to extract clean JSON from LLM output (handles code fences, preamble, thought tags)
 export function extractJsonFromResponse(rawText) {
@@ -382,8 +382,16 @@ export class LLMAdapter {
    */
   static async _callOllama(prompt, settings, onTokenChunk) {
     const endpoint = settings.ollama?.endpoint || 'http://localhost:11434';
-    const model = settings.ollama?.model || 'qwen2.5:3b';
+    const model = settings.ollama?.model || 'gemma4:12b';
     const temperature = settings.ollama?.temperature ?? 0.2;
+    const num_ctx = Number(settings.ollama?.num_ctx) || 32768;
+
+    // Token budgeting check before dispatch
+    const totalPromptText = (prompt || '') + '\n' + (SYSTEM_PROMPT || '');
+    const estimatedTokens = estimateTokens(totalPromptText);
+    if (estimatedTokens > num_ctx) {
+      throw new Error(`Context budget exceeded: Estimated ${estimatedTokens} tokens exceeds configured Ollama context window (num_ctx: ${num_ctx}). Please increase num_ctx in Settings or reduce batch size.`);
+    }
 
     const payload = {
       model,
@@ -393,7 +401,7 @@ export class LLMAdapter {
       stream: true,
       options: {
         temperature,
-        num_ctx: 16384
+        num_ctx
       }
     };
 

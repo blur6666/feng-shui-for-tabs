@@ -3,7 +3,7 @@
  * Central event router, SidePanel coordinator, and task orchestrator.
  */
 
-import { DEFAULT_SETTINGS, MESSAGE_TYPES } from '../shared/constants.js';
+import { DEFAULT_SETTINGS, MESSAGE_TYPES, SYSTEM_PROMPT, estimateTokens } from '../shared/constants.js';
 import { collectAllTabs } from './tab-collector.js';
 import { distillTabsForPrompt, constructAnalysisPrompt } from './content-distiller.js';
 import { LLMAdapter } from './llm-adapter.js';
@@ -177,11 +177,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           const distilled = distillTabsForPrompt(tabData.tabs, { maxSnippetLength: 220 });
           const prompt = constructAnalysisPrompt(distilled, payload?.customInstructions || '');
+          const estimatedTokens = estimateTokens(prompt + '\n' + (SYSTEM_PROMPT || ''));
+          const maxContext = Number(mergedSettings.ollama?.num_ctx) || 32768;
 
           // Step 3: Stream to Local LLM
           chrome.runtime.sendMessage({
             type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
-            payload: { stage: 'thinking', message: `Synthesizing ${tabData.tabs.length} tabs with ${mergedSettings.provider.toUpperCase()}...` }
+            payload: {
+              stage: 'thinking',
+              estimatedTokens,
+              maxContext,
+              message: `Synthesizing ${tabData.tabs.length} tabs with ${(mergedSettings.provider || 'AI').toUpperCase()} (~ ${estimatedTokens} / ${maxContext} ctx tokens)...`
+            }
           }).catch(() => {});
 
           const plan = await LLMAdapter.generateGroupingPlan(prompt, mergedSettings, (tokenChunk, accumulatedText) => {
