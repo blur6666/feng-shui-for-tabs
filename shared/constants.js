@@ -173,7 +173,7 @@ For each tab, output:
 - subject: concise description of WHAT THE PAGE IS ABOUT (topic, project, product, problem). NEVER use the website or domain name.
 - entity: primary named entity or product (e.g. 'Philips 5000 Air Fryer', 'Rust Compiler', 'Tokyo Hotel')
 - intent: user goal (e.g. 'research', 'troubleshooting', 'shopping', 'reference')
-- junkType: string if this is low-value/operational ('new_tab', 'error', 'auth', 'blank', 'thank_you') or null if valuable.
+- junkType: string if this is low-value/operational ('new_tab', 'extension', 'internal', 'error', 'auth_or_transactional') or null if valuable.
 
 Return ONLY a valid JSON object with "tabs": [ ... ].`;
 
@@ -272,7 +272,8 @@ export const JSON_SCHEMA = {
 };
 
 /**
- * Estimates token count from string content (rule of thumb: ~4 chars per token).
+ * Estimates token count from string content (rule of thumb: ~4 chars per token for Latin/JSON;
+ * note that CJK/non-Latin scripts may have higher token density).
  */
 export function estimateTokens(text) {
   if (!text) return 0;

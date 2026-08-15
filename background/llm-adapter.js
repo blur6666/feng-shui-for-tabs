@@ -455,14 +455,14 @@ export class LLMAdapter {
   /**
    * Chrome Built-in Prompt API (Gemini Nano) implementation
    */
-  static async _callGeminiNano(prompt, settings, onTokenChunk) {
+  static async _callGeminiNano(prompt, settings, onTokenChunk, systemPrompt = null) {
     const aiObj = globalThis.ai || (typeof LanguageModel !== 'undefined' ? { languageModel: LanguageModel } : null);
     if (!aiObj || !aiObj.languageModel) {
       throw new Error('Chrome Built-in Prompt API is not supported in this Chrome browser instance.');
     }
 
     const session = await aiObj.languageModel.create({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: systemPrompt || SYSTEM_PROMPT,
       temperature: settings.geminiNano?.temperature ?? 0.2,
       topK: settings.geminiNano?.topK ?? 3
     });

@@ -83,7 +83,7 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
 
     // Process all tabs in current batch with fallbacks
     for (const tab of batch) {
-      const localJunk = detectJunk(tab);
+      const localJunk = tab.localJunk || detectJunk(tab);
       const labelData = batchLabelsMap.get(tab.id) || {
         id: tab.id,
         subject: tab.title || tab.domain || 'Reference',

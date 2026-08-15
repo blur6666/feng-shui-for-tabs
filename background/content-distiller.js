@@ -3,6 +3,8 @@
  * Compacts and synthesizes tab data into token-efficient payloads for Local LLMs.
  */
 
+import { detectJunk } from '../shared/junk-rules.js';
+
 export function distillTabsForPrompt(tabs, options = {}) {
   const { maxSnippetLength = 200 } = options;
 
@@ -57,7 +59,8 @@ export function distillTabsForPrompt(tabs, options = {}) {
       headings: headings.length > 0 ? headings : undefined,
       platformContext: subjectSignals,
       schema: ext.schemaType || undefined,
-      snippet: snippet.length > 20 ? snippet : undefined
+      snippet: snippet.length > 20 ? snippet : undefined,
+      localJunk: detectJunk(tab) || undefined
     };
 
     // Remove undefined properties to keep JSON payload minimal
@@ -82,7 +85,7 @@ export function constructLabelingPrompt(batchTabs) {
 1. "subject": Describe WHAT THE PAGE IS ABOUT (task, project, problem, product). NEVER use the website name.
 2. "entity": Specific product or topic name if identifiable.
 3. "intent": User goal (e.g., research, shopping, troubleshooting, reference).
-4. "junkType": Set to 'new_tab', 'error', 'auth', 'blank', or 'thank_you' if the page is low-value/operational; otherwise null.
+4. "junkType": Set to 'new_tab', 'extension', 'internal', 'error', or 'auth_or_transactional' if the page is low-value/operational; otherwise null.
 5. You MUST return an entry for EVERY tab ID in the batch.
 
 Return JSON matching:

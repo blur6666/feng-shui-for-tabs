@@ -102,7 +102,8 @@ export function validateGroupingPlan(plan, labeledTabs = []) {
 }
 
 /**
- * Strips emojis, control characters, and trims to <= 12 characters on a word boundary
+ * Strips emojis, control characters, and trims to <= 12 characters respecting word boundaries
+ * where possible (falling back to a 12-char slice if the first word itself exceeds 12 chars)
  * without substituting the subject chosen by the LLM.
  */
 export function cleanAndShortenTitle(rawTitle) {
@@ -199,28 +200,14 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     }
   }
 
-  // Handle leftovers / Other
+  // Handle leftovers / Other: keep as dedicated 'Other' group to avoid polluting subject clusters
   if (leftoverTabIds.length > 0) {
-    if (leftoverTabIds.length >= minSize) {
-      validGroups.push({
-        title: 'Other',
-        color: 'grey',
-        rationale: 'Consolidated reference tabs',
-        tabIds: leftoverTabIds
-      });
-    } else if (validGroups.length > 0) {
-      // If remaining tabs count < minSize, append them to the largest group
-      const largest = validGroups.reduce((max, g) => (g.tabIds.length > max.tabIds.length ? g : max), validGroups[0]);
-      largest.tabIds.push(...leftoverTabIds);
-    } else {
-      // If total tabs across all browser is < minSize
-      validGroups.push({
-        title: 'General',
-        color: 'blue',
-        rationale: 'Active tabs',
-        tabIds: leftoverTabIds
-      });
-    }
+    validGroups.push({
+      title: 'Other',
+      color: 'grey',
+      rationale: 'Unassigned or standalone reference tabs',
+      tabIds: leftoverTabIds
+    });
   }
 
   return validGroups;
