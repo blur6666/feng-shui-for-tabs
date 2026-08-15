@@ -129,9 +129,7 @@ const GENERIC_SUBJECTS = new Set(['reference', 'home', 'login', 'sign in', 'sign
 const MIN_EMPTY_ENTITY_SUBJECT_LENGTH = 12;
 
 // Words ending in 's' that are not simple plurals (false-positive guard for near-match).
-const NON_PLURAL_S_WORDS = new Set([
-  'news', 'lens', 'series', 'species', 'movies', 'ties', 'does', 'goes', 'glass', 'plus'
-]);
+const NON_PLURAL_S_WORDS = new Set(['news', 'lens', 'series', 'species', 'does', 'goes', 'chaos']);
 
 /**
  * Normalizes a label for near-match comparison (trim, lowercase, conservative singularization).
@@ -143,11 +141,10 @@ const NON_PLURAL_S_WORDS = new Set([
 function normalizeLabel(value) {
   const normalized = (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (normalized.length <= 3) return normalized;                            // gas, bus, was, his, is, us
-  if (NON_PLURAL_S_WORDS.has(normalized)) return normalized;                // news, lens, series, movies, does...
-  if (/(ss|us|is|ws|as|os)$/.test(normalized)) return normalized;           // class, status, analysis, news, alias, chaos
+  if (NON_PLURAL_S_WORDS.has(normalized)) return normalized;                // news, lens, series, species, does, goes, chaos
+  if (/(ss|us|is|as)$/.test(normalized)) return normalized;                 // class, status, analysis, alias
   if (/(x|ch|sh|ss|z|o)es$/.test(normalized)) return normalized.slice(0, -2); // boxes -> box, watches -> watch, addresses -> address, heroes -> hero
-  if (/[^aeiou]ies$/.test(normalized)) return normalized.slice(0, -3) + 'y';  // cookies -> cookie, stories -> story
-  if (normalized.endsWith('s')) return normalized.slice(0, -1);             // reviews -> review, air fryers -> air fryer
+  if (normalized.endsWith('s')) return normalized.slice(0, -1);             // reviews -> review, air fryers -> air fryer, cookies -> cookie, videos -> video
   return normalized;
 }
 
@@ -205,4 +202,5 @@ export function detectSemanticRedundancies(labeledTabs = []) {
 
   return redundancyActions;
 }
+
 
