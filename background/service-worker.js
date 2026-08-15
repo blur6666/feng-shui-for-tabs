@@ -8,7 +8,7 @@ import { collectAllTabs } from './tab-collector.js';
 import { distillTabsForPrompt, constructClusteringPrompt } from './content-distiller.js';
 import { labelTabsInBatches } from './tab-labeler.js';
 import { LLMAdapter } from './llm-adapter.js';
-import { TabOrganizer } from './tab-organizer.js';
+import { TabOrganizer, validateGroupingPlan } from './tab-organizer.js';
 
 // Helper to strip Origin header on requests to local LLMs (bypasses Ollama 403 Forbidden check)
 async function setupDNRRules() {
@@ -213,6 +213,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 payload: { stage: 'streaming', chunk: tokenChunk, accumulatedText }
               }).catch(() => {});
             });
+
+            // Guardrail validation check (TASK-1.7)
+            let validation = validateGroupingPlan(plan, labeledTabs);
+            if (!validation.valid) {
+              console.warn('[ServiceWorker] Grouping plan violated taxonomy rules:', validation.violations);
+              const retryPrompt = `${clusterPrompt}\n\nCORRECTION REQUIRED:\nThe previous attempt had the following errors:\n- ${validation.violations.join('\n- ')}\n\nPlease fix these mistakes and re-group strictly by subject theme without naming groups after websites or creating duplicate themes.`;
+
+              try {
+                chrome.runtime.sendMessage({
+                  type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
+                  payload: {
+                    stage: 'thinking',
+                    message: 'Refining grouping plan to fix site/duplicate violations...'
+                  }
+                }).catch(() => {});
+
+                const retryPlan = await LLMAdapter.generateGroupingPlan(retryPrompt, mergedSettings);
+                const retryValidation = validateGroupingPlan(retryPlan, labeledTabs);
+
+                if (retryValidation.valid || retryValidation.violations.length < validation.violations.length) {
+                  plan = retryPlan;
+                  validation = retryValidation;
+                }
+              } catch (retryErr) {
+                console.warn('[ServiceWorker] Retry grouping call failed:', retryErr.message);
+              }
+
+              if (!validation.valid) {
+                plan.warning = `Note: Some groups may require review: ${validation.violations.join('; ')}`;
+              }
+            }
           } else {
             plan = { summary: 'All open tabs categorized as operational or duplicates.', groups: [] };
           }

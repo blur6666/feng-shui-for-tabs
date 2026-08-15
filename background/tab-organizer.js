@@ -18,6 +18,89 @@ const CONTRAST_PALETTE = [
   'grey'
 ];
 
+const SITE_TOKENS = [
+  'reddit', 'wiki', 'wikipedia', 'youtube', 'github', 'gitlab',
+  'amazon', 'mercado livre', 'mercadolivre', 'twitch', 'stackoverflow',
+  'stackexchange', 'google', 'bing', 'twitter', 'facebook', 'instagram',
+  'threads', 'ebay', 'fandom', 'steam'
+];
+
+/**
+ * Validates a grouping plan against anti-site and anti-duplicate rules.
+ * @param {object} plan
+ * @param {Array<object>} labeledTabs
+ * @returns {{ valid: boolean, violations: string[] }}
+ */
+export function validateGroupingPlan(plan, labeledTabs = []) {
+  const violations = [];
+  if (!plan || !plan.groups || plan.groups.length === 0) {
+    return { valid: true, violations: [] };
+  }
+
+  const tabMap = new Map((labeledTabs || []).map(t => [t.id, t]));
+  const seenTitles = new Map();
+  const seenLabels = new Map();
+
+  for (let i = 0; i < plan.groups.length; i++) {
+    const group = plan.groups[i];
+    const rawTitle = (group.title || '').trim().toLowerCase();
+    const rawLabel = (group.label || group.title || '').trim().toLowerCase();
+    const tabIds = group.tabIds || [];
+
+    // 1. Check title against known site tokens
+    for (const site of SITE_TOKENS) {
+      if (rawTitle === site || rawTitle === site.replace(/\s+/g, '') || rawTitle.startsWith(site + ' ') || rawTitle.endsWith(' ' + site)) {
+        violations.push(`Group "${group.title}" is named after website "${site}" rather than a topic`);
+        break;
+      }
+    }
+
+    // 2. Check if tabs are >80% one domain but span multiple distinct subjects
+    if (tabIds.length >= 3) {
+      const domainCounts = new Map();
+      const distinctSubjects = new Set();
+
+      for (const id of tabIds) {
+        const tab = tabMap.get(id);
+        if (tab) {
+          const domain = (tab.domain || '').toLowerCase();
+          if (domain) domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+          if (tab.subject) distinctSubjects.add(tab.subject.toLowerCase().trim());
+        }
+      }
+
+      for (const [dom, count] of domainCounts.entries()) {
+        const share = count / tabIds.length;
+        if (share > 0.8 && distinctSubjects.size >= 3) {
+          violations.push(`Group "${group.title}" contains ${Math.round(share * 100)}% tabs from ${dom} but spans ${distinctSubjects.size} distinct subjects`);
+          break;
+        }
+      }
+    }
+
+    // 3. Duplicate checks
+    const normTitle = rawTitle.replace(/[^\w]/g, '');
+    const normLabel = rawLabel.replace(/[^\w]/g, '');
+
+    if (normTitle && seenTitles.has(normTitle)) {
+      violations.push(`Duplicate group theme detected between group #${seenTitles.get(normTitle) + 1} and group #${i + 1} ("${group.title}")`);
+    } else if (normTitle) {
+      seenTitles.set(normTitle, i);
+    }
+
+    if (normLabel && seenLabels.has(normLabel)) {
+      violations.push(`Duplicate group label detected between group #${seenLabels.get(normLabel) + 1} and group #${i + 1} ("${group.label}")`);
+    } else if (normLabel) {
+      seenLabels.set(normLabel, i);
+    }
+  }
+
+  return {
+    valid: violations.length === 0,
+    violations
+  };
+}
+
 /**
  * Strips emojis, control characters, and trims to <= 12 characters on a word boundary
  * without substituting the subject chosen by the LLM.
