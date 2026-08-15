@@ -1,13 +1,12 @@
 ---
 id: TASK-1.5
-title: 'P0-4: Two-pass label then cluster pipeline'
+title: Two-pass label then cluster pipeline
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:48'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:42'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies:
   - TASK-1.3
@@ -35,6 +34,6 @@ A single call asking a 12B model to both understand ~250 pages and design a taxo
 - [ ] #3 Missing ids from a pass-1 batch are retried once, then defaulted rather than dropped silently
 - [ ] #4 Tabs with a non-null junkType never appear in plan.groups; they are converted to suggestedActions entries instead
 - [ ] #5 Pass 2 clusters only on {subject, entity, intent} and returns title (<=12 chars, pre-abbreviated by the LLM), label (full name), rationale, tabIds, color
-- [ ] #6 No single call exceeds the token budget from P0-7, at 30, 120, and 250 tab counts
+- [ ] #6 No single call exceeds the token budget from TASK-1.4, at 30, 120, and 250 tab counts
 - [ ] #7 label is added to JSON_SCHEMA in shared/constants.js
 <!-- AC:END -->

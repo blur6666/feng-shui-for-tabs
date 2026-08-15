@@ -1,13 +1,12 @@
 ---
 id: TASK-2.2
-title: 'P1-3: Middle-click to close a tab or a whole group'
+title: Middle-click to close a tab or a whole group
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:49'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - cleanup
-  - p1
   - ui
 milestone: m-1
 dependencies: []

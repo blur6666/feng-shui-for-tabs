@@ -1,13 +1,12 @@
 ---
 id: TASK-1
-title: 'Group tabs by subject, not by site (P0 epic)'
+title: 'Group tabs by subject, not by site'
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies: []
 priority: high

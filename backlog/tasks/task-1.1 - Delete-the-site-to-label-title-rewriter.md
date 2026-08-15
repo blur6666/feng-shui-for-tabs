@@ -1,13 +1,12 @@
 ---
 id: TASK-1.1
-title: 'P0-1: Delete the site-to-label title rewriter'
+title: Delete the site-to-label title rewriter
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies: []
 modified_files:

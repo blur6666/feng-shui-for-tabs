@@ -1,13 +1,12 @@
 ---
 id: TASK-1.3
-title: 'P0-3: Feed existing subject signals into the distiller'
+title: Feed existing subject signals into the distiller
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies: []
 modified_files:

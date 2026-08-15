@@ -1,13 +1,12 @@
 ---
 id: TASK-1.4
-title: 'P0-7: Context budget - stop silent truncation'
+title: Context budget - stop silent truncation
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:41'
 labels:
   - grouping
-  - p0
   - ollama
 milestone: m-0
 dependencies: []
@@ -23,7 +22,7 @@ ordinal: 5000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-_callOllama() in background/llm-adapter.js hardcodes num_ctx: 16384 (line 396). 250 tabs distill to roughly 35-45k tokens (~120-180 tokens/tab across title, domain, path, description, headings, snippet), so Ollama silently drops the overflow and gemma never sees most of the tab list - those tabs then fall through to fallback clustering (P0-2). Originally filed as 'later' but promoted: it is a co-cause of the bad grouping the user observed, and nothing currently reports the overflow. Reference model: gemma 12B via Ollama.
+_callOllama() in background/llm-adapter.js hardcodes num_ctx: 16384 (line 396). 250 tabs distill to roughly 35-45k tokens (~120-180 tokens/tab across title, domain, path, description, headings, snippet), so Ollama silently drops the overflow and gemma never sees most of the tab list - those tabs then fall through to fallback clustering (TASK-1.2). Originally filed as 'later' but promoted: it is a co-cause of the bad grouping the user observed, and nothing currently reports the overflow. Reference model: gemma 12B via Ollama.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

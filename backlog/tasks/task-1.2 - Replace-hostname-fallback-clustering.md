@@ -1,13 +1,12 @@
 ---
 id: TASK-1.2
-title: 'P0-2: Replace hostname fallback clustering'
+title: Replace hostname fallback clustering
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:41'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies: []
 modified_files:
@@ -21,7 +20,7 @@ ordinal: 3000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-reconcilePlanWithRawTabs() in background/tab-organizer.js (lines 405-448) clusters any tab the LLM failed to assign by hostname (reddit.com -> Reddit, wiki/fandom/gamepedia -> Wiki, github/gitlab -> Code, youtube/twitch -> Video). Combined with the context-truncation bug (P0-7), this is where most Reddit/Wiki groups actually originate.
+reconcilePlanWithRawTabs() in background/tab-organizer.js (lines 405-448) clusters any tab the LLM failed to assign by hostname (reddit.com -> Reddit, wiki/fandom/gamepedia -> Wiki, github/gitlab -> Code, youtube/twitch -> Video). Combined with the context-truncation bug (TASK-1.4), this is where most Reddit/Wiki groups actually originate.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

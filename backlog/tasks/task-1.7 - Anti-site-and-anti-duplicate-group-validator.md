@@ -1,13 +1,12 @@
 ---
 id: TASK-1.7
-title: 'P0-5: Anti-site and anti-duplicate group validator'
+title: Anti-site and anti-duplicate group validator
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:48'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - grouping
-  - p0
 milestone: m-0
 dependencies:
   - TASK-1.5

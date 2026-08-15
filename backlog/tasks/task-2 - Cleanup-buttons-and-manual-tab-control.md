@@ -1,13 +1,12 @@
 ---
 id: TASK-2
-title: Cleanup buttons and manual tab control (P1 epic)
+title: Cleanup buttons and manual tab control
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:48'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:40'
 labels:
   - cleanup
-  - p1
 milestone: m-1
 dependencies: []
 priority: medium

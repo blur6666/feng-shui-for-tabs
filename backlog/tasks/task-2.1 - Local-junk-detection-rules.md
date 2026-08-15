@@ -1,13 +1,12 @@
 ---
 id: TASK-2.1
-title: 'P1-1: Local junk detection rules'
+title: Local junk detection rules
 status: To Do
 assignee: []
 created_date: '2026-08-15 10:49'
-updated_date: '2026-08-15 11:20'
+updated_date: '2026-08-15 11:41'
 labels:
   - cleanup
-  - p1
 milestone: m-1
 dependencies: []
 modified_files:
@@ -21,7 +20,7 @@ ordinal: 10000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-New shared/junk-rules.js, consumed by the P0-4 pass-1 labeler as a pre-tag and as the fallback when the LLM omits junkType. Reuse isScriptableUrl() from background/tab-collector.js (lines 26-40) for the new-tab/extension/settings patterns rather than duplicating that list.
+New shared/junk-rules.js, consumed by the TASK-1.5 pass-1 labeler as a pre-tag and as the fallback when the LLM omits junkType. Reuse isScriptableUrl() from background/tab-collector.js (lines 26-40) for the new-tab/extension/settings patterns rather than duplicating that list.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
