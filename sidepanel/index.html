@@ -95,6 +95,17 @@
         </div>
       </div>
 
+      <div class="processing-profile-row">
+        <div class="option-field processing-profile-field">
+          <label for="select-analysis-profile">Processing Profile</label>
+          <select id="select-analysis-profile" class="form-select">
+            <option value="fast" selected>Fast — compact local inference</option>
+            <option value="quality">Quality — richer evidence and retries</option>
+          </select>
+        </div>
+        <p id="analysis-profile-hint" class="analysis-profile-hint">Fast uses compact batches and a smaller effective context. Your configured model is never changed automatically.</p>
+      </div>
+
       <div class="instructions-field">
         <input type="text" id="input-instructions" class="form-input"
           placeholder="Custom focus (e.g., separate work from shopping)...">
@@ -123,11 +134,20 @@
       <div class="progress-bar-container">
         <div id="progress-bar-fill" class="progress-bar-fill"></div>
       </div>
+      <div class="progress-actions">
+        <span id="progress-meta" class="progress-meta"></span>
+        <button id="btn-cancel-analysis" type="button" class="btn-cancel-analysis">Cancel</button>
+      </div>
       <details class="stream-details">
         <summary>View Live LLM Output</summary>
         <pre id="stream-output" class="stream-output"></pre>
       </details>
     </section>
+
+    <details id="analysis-diagnostics-card" class="analysis-diagnostics-card hidden">
+      <summary id="analysis-diagnostics-summary">Last analysis diagnostics</summary>
+      <pre id="analysis-diagnostics" class="analysis-diagnostics"></pre>
+    </details>
 
     <!-- Analysis Results & Diff View -->
     <main id="results-container" class="results-container hidden">

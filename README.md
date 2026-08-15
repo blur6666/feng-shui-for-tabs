@@ -66,6 +66,40 @@ A Manifest V3 Chrome Extension that harvests maximum semantic data from all open
 
 ---
 
+## ⚡ Fast and Quality processing profiles
+
+The side panel has a **Processing Profile** selector. It is saved with your extension settings and does **not** switch models, pull models, use a cloud fallback, or increase Ollama concurrency.
+
+| Profile | Best for | What it does |
+| --- | --- | --- |
+| **Fast** (default) | Large tab sets and responsive local use | Locally routes known operational tabs before inference, sends compact evidence, token-packs up to 50 tabs per Pass-1 request, caps the effective Ollama context at 8K, bounds output, and skips a second full Pass-2 correction request. |
+| **Quality** | Smaller tab sets where richer page evidence matters | Retains headings, keywords, platform context, and readability snippets; uses conservative 20-tab batches; and retains the validation/correction retry when the final grouping violates guardrails. |
+
+Both profiles keep semantic two-pass grouping: Pass 1 labels each tab's subject/entity/intent, then Pass 2 forms Chrome tab groups. They keep one Ollama generation in flight by default because extra concurrency can increase KV-cache pressure and make local inference slower.
+
+### Choosing a local model and context
+
+- **Fast:** If installed locally, a capable small model such as `qwen2.5:3b` or `llama3.2:3b` is a practical starting point for 100-tab workloads. Select it yourself in Settings; the extension never changes your configured model automatically.
+- **Quality:** Use the model you already trust for grouping quality. Larger models can improve labels but can dominate total latency, particularly if they load cold.
+- **`num_ctx`:** Treat the Ollama setting as a memory/quality trade-off, not a speed setting. Larger contexts reserve more memory. Fast applies an 8K effective cap; Quality uses your configured cap. Every request within a run uses that profile-effective value so Ollama can reuse its runner instead of reloading it when the context changes.
+- **Warm versus cold runs:** The first request may include model-load time. The extension sends `keep_alive` with the same profile-effective context so later requests and runs can reuse a resident model when memory permits.
+
+### Progress, cancellation, and diagnostics
+
+While an analysis runs, the side panel reports collection, Pass-1 batch completion, retry/fallback status, elapsed time, and throttled live Pass-2 output. Use **Cancel** to abort queued and in-flight work; cancellation never applies tab changes. After a completed, failed, or cancelled run, expand **analysis diagnostics** to see the safe request count, retries, timing, model-load time, and output-token rate when Ollama reports them.
+
+### Reproducible 100-tab benchmark
+
+Run a local, synthetic 100-tab benchmark against an installed model:
+
+```bash
+node benchmark-analysis-profiles.mjs fast qwen2.5:3b
+# Optional comparison:
+node benchmark-analysis-profiles.mjs quality qwen2.5:3b
+```
+
+The JSON report records cold/warm model load, Pass-1 and Pass-2 elapsed time, request count, retries, output-token rate, batch count, and coverage. Record the model, profile, context setting, and hardware alongside the report; performance is hardware- and model-dependent, so no single number is presented as universal.
+
 ## 🛠️ Usage
 
 1. Click the **Tab Intelligence** action icon to open the **Side Panel**.

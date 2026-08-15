@@ -25,35 +25,51 @@ export function normalizeUrl(rawUrl) {
 import { isScriptableUrl, isBlockedByPrivacy } from '../shared/junk-rules.js';
 export { isScriptableUrl, isBlockedByPrivacy };
 
-// Timeout wrapper so no single tab script can ever hang the collection
-function withTimeout(promise, ms, fallbackValue = null) {
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  const reason = signal.reason;
+  throw reason instanceof Error ? reason : new Error('Analysis cancelled during tab collection.');
+}
+
+// Timeout wrapper so no single tab script can ever hang the collection.
+function withTimeout(promise, ms, fallbackValue = null, signal = null) {
   let timer;
+  let abortListener;
   const timeoutPromise = new Promise(resolve => {
     timer = setTimeout(() => resolve(fallbackValue), ms);
   });
+  const abortPromise = signal
+    ? new Promise((resolve, reject) => {
+      abortListener = () => reject(signal.reason instanceof Error ? signal.reason : new Error('Analysis cancelled during tab collection.'));
+      if (signal.aborted) abortListener();
+      else signal.addEventListener('abort', abortListener, { once: true });
+    })
+    : null;
+
   return Promise.race([
-    promise.then(res => {
-      clearTimeout(timer);
-      return res;
-    }).catch(err => {
-      clearTimeout(timer);
-      return { error: err.message };
-    }),
-    timeoutPromise
-  ]);
+    promise.then(res => res).catch(err => ({ error: err.message })),
+    timeoutPromise,
+    abortPromise
+  ].filter(Boolean)).finally(() => {
+    if (timer) clearTimeout(timer);
+    if (signal && abortListener) signal.removeEventListener('abort', abortListener);
+  });
 }
 
-// Robust Worker Pool for concurrent tab processing without deadlocks
-async function mapConcurrentPool(items, concurrency, workerFn) {
+// Robust Worker Pool for concurrent tab processing without deadlocks.
+async function mapConcurrentPool(items, concurrency, workerFn, signal = null) {
   const results = new Array(items.length);
   let nextIndex = 0;
 
   async function worker() {
-    while (nextIndex < items.length) {
+    while (true) {
+      throwIfAborted(signal);
       const index = nextIndex++;
+      if (index >= items.length) return;
       try {
         results[index] = await workerFn(items[index], index);
       } catch (err) {
+        if (signal?.aborted) throw err;
         results[index] = { error: err.message };
       }
     }
@@ -62,6 +78,7 @@ async function mapConcurrentPool(items, concurrency, workerFn) {
   const workerCount = Math.min(concurrency, items.length);
   const workers = Array.from({ length: workerCount }, () => worker());
   await Promise.all(workers);
+  throwIfAborted(signal);
   return results;
 }
 
@@ -75,9 +92,11 @@ export async function collectAllTabs(options = {}, onProgress = null) {
     scope = 'all_windows', // 'all_windows' | 'current_window'
     extractReadability = true,
     skipPinned = false,
-    privacyBlocklist = []
+    privacyBlocklist = [],
+    signal = null
   } = options;
 
+  throwIfAborted(signal);
   let windows = [];
   if (scope === 'current_window') {
     const currentWin = await chrome.windows.getLastFocused({ populate: true });
@@ -90,8 +109,10 @@ export async function collectAllTabs(options = {}, onProgress = null) {
   const rawTabs = [];
   let shieldedTabs = 0;
   for (const win of windows) {
+    throwIfAborted(signal);
     if (win.type !== 'normal') continue;
     for (const tab of win.tabs || []) {
+      throwIfAborted(signal);
       if (skipPinned && tab.pinned) continue;
       if (isBlockedByPrivacy(tab.url, privacyBlocklist)) {
         shieldedTabs++;
@@ -113,6 +134,7 @@ export async function collectAllTabs(options = {}, onProgress = null) {
 
   // Extract content in concurrent worker pool of 8
   const tabRecords = await mapConcurrentPool(rawTabs, 8, async (tab) => {
+    throwIfAborted(signal);
     const normalized = normalizeUrl(tab.url);
     let isDuplicate = false;
     let duplicateOfTabId = null;
@@ -141,7 +163,7 @@ export async function collectAllTabs(options = {}, onProgress = null) {
         }).then(res => res?.[0]?.result || null);
 
         // Enforce a strict 1.2s timeout per tab
-        extractedData = await withTimeout(executePromise, 1200, { error: 'Extraction timed out' });
+        extractedData = await withTimeout(executePromise, 1200, { error: 'Extraction timed out' }, signal);
       } catch (err) {
         extractedData = { error: err.message };
       }
@@ -169,7 +191,7 @@ export async function collectAllTabs(options = {}, onProgress = null) {
       duplicateOfTabId,
       extractedData
     };
-  });
+  }, signal);
 
   return {
     windows: windows.map(w => ({ id: w.id, focused: w.focused, tabCount: w.tabs?.length || 0 })),

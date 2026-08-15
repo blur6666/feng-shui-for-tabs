@@ -13,7 +13,11 @@ let appState = {
   rawTabsMap: new Map(),
   totalTabs: 0,
   windowsCount: 0,
-  duplicatesCount: 0
+  duplicatesCount: 0,
+  analysisId: null,
+  progressStartedAt: 0,
+  streamBuffer: '',
+  streamTimer: null
 };
 
 // DOM Elements Cache
@@ -31,13 +35,20 @@ const elements = {
   selectGranularity: document.getElementById('select-granularity'),
   selectScope: document.getElementById('select-scope'),
   selectConsolidation: document.getElementById('select-consolidation'),
+  selectAnalysisProfile: document.getElementById('select-analysis-profile'),
+  analysisProfileHint: document.getElementById('analysis-profile-hint'),
   inputInstructions: document.getElementById('input-instructions'),
   btnAnalyze: document.getElementById('btn-analyze'),
   progressCard: document.getElementById('progress-card'),
   progressStage: document.getElementById('progress-stage'),
   progressMessage: document.getElementById('progress-message'),
   progressBarFill: document.getElementById('progress-bar-fill'),
+  progressMeta: document.getElementById('progress-meta'),
+  btnCancelAnalysis: document.getElementById('btn-cancel-analysis'),
   streamOutput: document.getElementById('stream-output'),
+  diagnosticsCard: document.getElementById('analysis-diagnostics-card'),
+  diagnosticsSummary: document.getElementById('analysis-diagnostics-summary'),
+  diagnosticsOutput: document.getElementById('analysis-diagnostics'),
   resultsContainer: document.getElementById('results-container'),
   resultsSummary: document.getElementById('results-summary'),
   actionsSection: document.getElementById('actions-section'),
@@ -96,12 +107,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupMessageListener();
 });
 
+function mergeSettings(stored = {}) {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    gemini: { ...DEFAULT_SETTINGS.gemini, ...(stored.gemini || {}) },
+    claude: { ...DEFAULT_SETTINGS.claude, ...(stored.claude || {}) },
+    openai: { ...DEFAULT_SETTINGS.openai, ...(stored.openai || {}) },
+    openrouter: { ...DEFAULT_SETTINGS.openrouter, ...(stored.openrouter || {}) },
+    groq: { ...DEFAULT_SETTINGS.groq, ...(stored.groq || {}) },
+    ollama: { ...DEFAULT_SETTINGS.ollama, ...(stored.ollama || {}) },
+    geminiNano: { ...DEFAULT_SETTINGS.geminiNano, ...(stored.geminiNano || {}) },
+    lmStudio: { ...DEFAULT_SETTINGS.lmStudio, ...(stored.lmStudio || {}) },
+    grouping: { ...DEFAULT_SETTINGS.grouping, ...(stored.grouping || {}) },
+    privacyBlocklist: Array.isArray(stored.privacyBlocklist) ? stored.privacyBlocklist : DEFAULT_SETTINGS.privacyBlocklist
+  };
+}
+
 // Load Settings from Storage
 async function loadSettings() {
   const data = await chrome.storage.local.get(['settings', 'granularity']);
-  if (data.settings) {
-    appState.settings = { ...DEFAULT_SETTINGS, ...data.settings };
-  }
+  appState.settings = mergeSettings(data.settings || {});
   if (data.granularity && elements.selectGranularity) {
     elements.selectGranularity.value = data.granularity;
   }
@@ -137,6 +163,10 @@ function updateSettingsUI() {
   if (elements.cfgOllamaEndpoint) elements.cfgOllamaEndpoint.value = ollama?.endpoint || 'http://localhost:11434';
   if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'gemma4:12b';
   if (elements.cfgOllamaNumCtx) elements.cfgOllamaNumCtx.value = ollama?.num_ctx || 32768;
+  if (elements.selectAnalysisProfile) {
+    elements.selectAnalysisProfile.value = appState.settings.grouping?.analysisProfile || 'fast';
+  }
+  updateAnalysisProfileHint(appState.settings.grouping?.analysisProfile || 'fast');
 
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
@@ -145,6 +175,13 @@ function updateSettingsUI() {
 
   updateProviderPanels(provider || '');
   updateProviderBadge(provider || '');
+}
+
+function updateAnalysisProfileHint(profile) {
+  if (!elements.analysisProfileHint) return;
+  elements.analysisProfileHint.textContent = profile === 'quality'
+    ? 'Quality keeps richer evidence and one corrective grouping retry. It may take longer on local models.'
+    : 'Fast uses compact adaptive batches, a smaller effective context, and no full-plan correction retry. Your model is never changed automatically.';
 }
 
 function updateProviderBadge(provider) {
@@ -170,8 +207,10 @@ function updateProviderPanels(selectedProvider) {
 
 function updateMainUIState() {
   const hasProvider = !!appState.settings.provider;
+  if (elements.selectGranularity) elements.selectGranularity.disabled = !hasProvider;
   if (elements.selectScope) elements.selectScope.disabled = !hasProvider;
   if (elements.selectConsolidation) elements.selectConsolidation.disabled = !hasProvider;
+  if (elements.selectAnalysisProfile) elements.selectAnalysisProfile.disabled = !hasProvider;
   if (elements.inputInstructions) elements.inputInstructions.disabled = !hasProvider;
   if (elements.btnAnalyze) elements.btnAnalyze.disabled = !hasProvider;
   if (elements.btnRefreshStats) elements.btnRefreshStats.disabled = !hasProvider;
@@ -256,6 +295,20 @@ function setupEventListeners() {
     });
   }
 
+  // Processing profile is intentionally a main-screen setting so users can
+  // choose latency versus richer validation without changing their provider.
+  if (elements.selectAnalysisProfile) {
+    elements.selectAnalysisProfile.addEventListener('change', async event => {
+      const analysisProfile = event.target.value === 'quality' ? 'quality' : 'fast';
+      appState.settings = {
+        ...appState.settings,
+        grouping: { ...appState.settings.grouping, analysisProfile }
+      };
+      updateAnalysisProfileHint(analysisProfile);
+      await chrome.storage.local.set({ settings: appState.settings });
+    });
+  }
+
   // Dropdown provider change
   if (elements.selectProvider) {
     elements.selectProvider.addEventListener('change', (e) => {
@@ -307,6 +360,7 @@ function setupEventListeners() {
 
   // Analyze Button
   elements.btnAnalyze.addEventListener('click', startAnalysis);
+  elements.btnCancelAnalysis?.addEventListener('click', cancelAnalysis);
 
   // Apply Groups Button
   elements.btnApply.addEventListener('click', applyTabGroups);
@@ -365,39 +419,152 @@ function collectSettingsFromModal() {
 }
 
 // Background Message Listener for Streaming Progress
+const STREAM_FLUSH_INTERVAL_MS = 120;
+const MAX_STREAM_OUTPUT_CHARS = 12000;
+
 function setupMessageListener() {
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === MESSAGE_TYPES.ANALYSIS_PROGRESS) {
-      handleProgressEvent(message.payload);
+      handleProgressEvent(message.payload || {});
     }
   });
 }
 
+function formatElapsed(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
+}
+
+function flushLiveOutput() {
+  appState.streamTimer = null;
+  if (!appState.streamBuffer) return;
+  const next = `${elements.streamOutput.textContent}${appState.streamBuffer}`;
+  elements.streamOutput.textContent = next.length > MAX_STREAM_OUTPUT_CHARS
+    ? `…${next.slice(-(MAX_STREAM_OUTPUT_CHARS - 1))}`
+    : next;
+  appState.streamBuffer = '';
+  elements.streamOutput.scrollTop = elements.streamOutput.scrollHeight;
+}
+
+function queueLiveOutput(chunk) {
+  if (!chunk) return;
+  appState.streamBuffer += chunk;
+  if (!appState.streamTimer) {
+    appState.streamTimer = setTimeout(flushLiveOutput, STREAM_FLUSH_INTERVAL_MS);
+  }
+}
+
+function resetProgressUI() {
+  if (appState.streamTimer) clearTimeout(appState.streamTimer);
+  appState.streamTimer = null;
+  appState.streamBuffer = '';
+  elements.streamOutput.textContent = '';
+  elements.progressStage.textContent = 'Preparing analysis';
+  elements.progressMessage.textContent = 'Preparing local model and tab evidence...';
+  elements.progressMeta.textContent = '';
+  elements.progressBarFill.style.width = '4%';
+  elements.btnCancelAnalysis.disabled = false;
+  elements.diagnosticsCard.classList.add('hidden');
+  elements.diagnosticsOutput.textContent = '';
+}
+
+function updateProgressMeta(payload = {}) {
+  const details = [];
+  if (payload.profile) details.push(payload.profile === 'quality' ? 'Quality profile' : 'Fast profile');
+  if (payload.batchIndex && payload.totalBatches) details.push(`Batch ${payload.batchIndex}/${payload.totalBatches}`);
+  if (payload.retryCount) details.push(`Retry ${payload.retryCount}${payload.retryReason ? ` (${payload.retryReason})` : ''}`);
+  if (payload.fallbackCount) details.push(`${payload.fallbackCount} local fallback${payload.fallbackCount === 1 ? '' : 's'}`);
+  if (payload.locallySkipped) details.push(`${payload.locallySkipped} local cleanup`);
+  if (payload.metrics?.elapsedMs) details.push(`request ${formatElapsed(payload.metrics.elapsedMs)}`);
+  if (payload.metrics?.outputTokensPerSecond) details.push(`${Math.round(payload.metrics.outputTokensPerSecond)} tok/s`);
+  if (appState.progressStartedAt) details.push(`elapsed ${formatElapsed(Date.now() - appState.progressStartedAt)}`);
+  elements.progressMeta.textContent = details.join(' · ');
+}
+
 function handleProgressEvent(payload) {
+  if (!appState.isAnalyzing) return;
+  if (payload.analysisId) {
+    if (appState.analysisId && appState.analysisId !== payload.analysisId) return;
+    appState.analysisId = payload.analysisId;
+  }
+
   const { stage, message, completed, total, chunk } = payload;
   elements.progressCard.classList.remove('hidden');
+  updateProgressMeta(payload);
+
+  if (stage === 'metrics') return;
 
   if (stage === 'collecting') {
     elements.progressStage.textContent = 'Harvesting Tabs';
-    elements.progressMessage.textContent = message;
+    elements.progressMessage.textContent = message || 'Collecting tab evidence...';
     if (total) {
-      const pct = Math.round((completed / total) * 40); // 0-40%
-      elements.progressBarFill.style.width = `${pct}%`;
+      const pct = Math.round((Number(completed) / total) * 35);
+      elements.progressBarFill.style.width = `${Math.max(4, Math.min(35, pct))}%`;
     }
   } else if (stage === 'distilling') {
     elements.progressStage.textContent = 'Distilling Content';
-    elements.progressMessage.textContent = message;
-    elements.progressBarFill.style.width = '55%';
+    elements.progressMessage.textContent = message || 'Compacting tab evidence...';
+    elements.progressBarFill.style.width = '42%';
   } else if (stage === 'thinking') {
     elements.progressStage.textContent = 'LLM Reasoning';
-    elements.progressMessage.textContent = message;
-    elements.progressBarFill.style.width = '75%';
+    elements.progressMessage.textContent = message || 'Analyzing semantic topics...';
+    const progress = total ? 42 + Math.round((Number(completed || 0) / total) * 40) : 78;
+    elements.progressBarFill.style.width = `${Math.max(42, Math.min(82, progress))}%`;
   } else if (stage === 'streaming') {
-    elements.progressBarFill.style.width = '90%';
-    if (chunk) {
-      elements.streamOutput.textContent += chunk;
-      elements.streamOutput.scrollTop = elements.streamOutput.scrollHeight;
+    elements.progressStage.textContent = 'Synthesizing Groups';
+    elements.progressMessage.textContent = 'Receiving the final grouping plan...';
+    elements.progressBarFill.style.width = '92%';
+    queueLiveOutput(chunk);
+  } else if (stage === 'cancelled') {
+    elements.progressStage.textContent = 'Cancelling Analysis';
+    elements.progressMessage.textContent = message || 'Stopping queued and in-flight model work...';
+    elements.btnCancelAnalysis.disabled = true;
+  }
+}
+
+function renderDiagnostics(diagnostics, outcome = 'Completed') {
+  if (!diagnostics || !elements.diagnosticsCard) return;
+  const lines = [
+    `Status: ${outcome}`,
+    `Profile: ${diagnostics.profile || 'not reported'}`,
+    `Total elapsed: ${formatElapsed(diagnostics.elapsedMs)}`,
+    `Collection: ${formatElapsed(diagnostics.collectionMs)}`,
+    `LLM requests: ${diagnostics.requestCount || 0}`,
+    `Retries: ${diagnostics.retryCount || 0}`
+  ];
+
+  for (const request of diagnostics.requests || []) {
+    const batch = request.batchIndex ? ` batch ${request.batchIndex}${request.totalBatches ? `/${request.totalBatches}` : ''}` : '';
+    const attempt = request.attempt && Number(request.attempt) > 1 ? ` retry ${request.attempt - 1}` : '';
+    const timing = request.elapsedMs ?? request.totalDurationMs;
+    const rates = request.outputTokensPerSecond ? ` · ${Math.round(request.outputTokensPerSecond)} tok/s` : '';
+    const loaded = request.loadDurationMs ? ` · load ${formatElapsed(request.loadDurationMs)}` : '';
+    lines.push(`• ${request.phase || 'LLM'}${batch}${attempt}: ${formatElapsed(timing)}${rates}${loaded}`);
+  }
+
+  elements.diagnosticsSummary.textContent = `${outcome} analysis diagnostics`;
+  elements.diagnosticsOutput.textContent = lines.join('\n');
+  elements.diagnosticsCard.classList.remove('hidden');
+}
+
+async function cancelAnalysis() {
+  if (!appState.isAnalyzing) return;
+  elements.btnCancelAnalysis.disabled = true;
+  elements.progressStage.textContent = 'Cancelling Analysis';
+  elements.progressMessage.textContent = 'Stopping queued and in-flight model work...';
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_TYPES.CANCEL_ANALYSIS,
+      payload: appState.analysisId ? { analysisId: appState.analysisId } : {}
+    });
+    if (!response?.success) {
+      elements.progressMessage.textContent = response?.error || 'Unable to cancel the active analysis.';
+      elements.btnCancelAnalysis.disabled = false;
     }
+  } catch (error) {
+    elements.progressMessage.textContent = `Unable to cancel: ${error.message}`;
+    elements.btnCancelAnalysis.disabled = false;
   }
 }
 
@@ -413,20 +580,25 @@ async function startAnalysis() {
   }
 
   appState.isAnalyzing = true;
+  appState.analysisId = null;
+  appState.progressStartedAt = Date.now();
   elements.btnAnalyze.disabled = true;
-  elements.streamOutput.textContent = '';
+  resetProgressUI();
   elements.progressCard.classList.remove('hidden');
   elements.resultsContainer.classList.add('hidden');
   elements.footerActions.classList.add('hidden');
 
+  let terminalOutcome = 'Completed';
   try {
     const customInstructions = elements.inputInstructions.value.trim();
+    const analysisProfile = elements.selectAnalysisProfile?.value === 'quality' ? 'quality' : 'fast';
     const settings = {
       ...appState.settings,
       grouping: {
         ...appState.settings.grouping,
         scope: elements.selectScope.value,
-        consolidation: elements.selectConsolidation.value
+        consolidation: elements.selectConsolidation.value,
+        analysisProfile
       }
     };
 
@@ -435,8 +607,17 @@ async function startAnalysis() {
       type: MESSAGE_TYPES.ANALYZE_TABS,
       payload: { customInstructions, settings, granularity }
     });
+    if (response?.analysisId) appState.analysisId = response.analysisId;
 
     if (!response || !response.success) {
+      terminalOutcome = response?.cancelled ? 'Cancelled' : 'Failed';
+      renderDiagnostics(response?.diagnostics, terminalOutcome);
+      if (response?.cancelled) {
+        elements.progressStage.textContent = 'Analysis Cancelled';
+        elements.progressMessage.textContent = 'No tab changes were applied.';
+        elements.progressBarFill.style.width = '100%';
+        return;
+      }
       throw new Error(response?.error || 'Failed to complete analysis.');
     }
 
@@ -449,12 +630,25 @@ async function startAnalysis() {
       shieldedTabs: response.shieldedTabs || 0
     };
     renderResults(appState.plan);
+    renderDiagnostics(response.diagnostics, 'Completed');
+    elements.progressStage.textContent = 'Analysis Complete';
+    elements.progressMessage.textContent = 'Review the proposed groups and diagnostics below.';
+    elements.progressBarFill.style.width = '100%';
   } catch (err) {
+    terminalOutcome = 'Failed';
+    elements.progressStage.textContent = 'Analysis Failed';
+    elements.progressMessage.textContent = err.message;
+    renderDiagnostics(err?.diagnostics, terminalOutcome);
     alert(`Analysis Failed: ${err.message}`);
   } finally {
+    flushLiveOutput();
     appState.isAnalyzing = false;
+    appState.analysisId = null;
     elements.btnAnalyze.disabled = false;
-    elements.progressCard.classList.add('hidden');
+    elements.btnCancelAnalysis.disabled = true;
+    if (terminalOutcome === 'Completed') {
+      elements.progressCard.classList.add('hidden');
+    }
   }
 }
 

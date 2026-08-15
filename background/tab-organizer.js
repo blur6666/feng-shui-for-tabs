@@ -189,8 +189,66 @@ export function granularityToMinSize(granularity) {
 }
 
 /**
+ * Normalizes raw LLM grouping output across dictionary formats, property name variations,
+ * and string/object ID representations into clean integer tabId lists.
+ */
+export function normalizePlanGroups(plan) {
+  if (!plan) return { summary: '', groups: [], suggestedActions: [] };
+  let rawGroups = plan.groups;
+  if (!rawGroups && typeof plan === 'object') {
+    const entries = Object.entries(plan).filter(([k, v]) => Array.isArray(v) && k !== 'suggestedActions');
+    if (entries.length > 0) {
+      rawGroups = entries.map(([title, tabIds]) => ({ title, tabIds }));
+    }
+  } else if (typeof rawGroups === 'object' && !Array.isArray(rawGroups)) {
+    rawGroups = Object.entries(rawGroups).map(([title, tabIds]) => ({ title, tabIds }));
+  }
+
+  if (!Array.isArray(rawGroups)) rawGroups = [];
+
+  const normalized = rawGroups.map(group => {
+    if (!group || typeof group !== 'object') return null;
+    const title = group.title || group.name || group.label || 'Other';
+    const label = group.label || group.title || title;
+    const color = group.color || 'blue';
+    const rationale = group.rationale || group.reason || '';
+
+    const rawIds = group.tabIds ?? group.tabs ?? group.tab_ids ?? group.ids ?? group.i ?? [];
+    const tabIds = [];
+    if (Array.isArray(rawIds)) {
+      for (const item of rawIds) {
+        if (typeof item === 'number' && Number.isFinite(item)) {
+          tabIds.push(item);
+        } else if (typeof item === 'string' && /^\d+$/.test(item.trim())) {
+          tabIds.push(Number(item.trim()));
+        } else if (item && typeof item === 'object') {
+          const nestedId = item.id ?? item.tabId ?? item.tab_id ?? item.i;
+          if (nestedId !== undefined && nestedId !== null && !isNaN(Number(nestedId))) {
+            tabIds.push(Number(nestedId));
+          }
+        }
+      }
+    }
+
+    return {
+      title,
+      label,
+      color,
+      rationale,
+      tabIds: Array.from(new Set(tabIds))
+    };
+  }).filter(g => g && g.tabIds.length > 0);
+
+  return {
+    summary: plan.summary || '',
+    groups: normalized,
+    suggestedActions: Array.isArray(plan.suggestedActions) ? plan.suggestedActions : []
+  };
+}
+
+/**
  * Ensures every group has at least minSize tabs (default 3).
- * Merges smaller groups and consolidates 'Other'.
+ * Merges smaller groups and consolidates 'Other' without destroying the entire plan.
  */
 export function consolidateSmallGroups(groups, minSize = 3) {
   if (!groups || groups.length === 0) return [];
@@ -199,6 +257,7 @@ export function consolidateSmallGroups(groups, minSize = 3) {
   const merged = mergeDuplicateGroups(groups);
 
   const validGroups = [];
+  const smallGroups = [];
   const leftoverTabIds = [];
 
   for (const group of merged) {
@@ -207,11 +266,25 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     } else if (group.tabIds.length >= minSize) {
       validGroups.push(group);
     } else {
-      leftoverTabIds.push(...group.tabIds);
+      smallGroups.push(group);
     }
   }
 
-  // Handle leftovers / Other: keep as dedicated 'Other' group to avoid polluting subject clusters
+  // Guard against collapsing the entire plan into 'Other':
+  // If no group met minSize, or if >50% of total tabs would end up in 'Other',
+  // keep 2-tab groups rather than destroying the user's entire tab organization.
+  const totalTabs = merged.reduce((sum, g) => sum + g.tabIds.length, 0);
+  const smallTabsCount = smallGroups.reduce((sum, g) => sum + g.tabIds.length, 0);
+
+  for (const small of smallGroups) {
+    if (small.tabIds.length >= 2 && (validGroups.length === 0 || (smallTabsCount + leftoverTabIds.length) / Math.max(1, totalTabs) > 0.5)) {
+      validGroups.push(small);
+    } else {
+      leftoverTabIds.push(...small.tabIds);
+    }
+  }
+
+  // Handle true leftovers / Other: keep as dedicated 'Other' group
   if (leftoverTabIds.length > 0) {
     validGroups.push({
       title: 'Other',
@@ -463,17 +536,16 @@ export class TabOrganizer {
    * Reconciles the LLM grouping plan with all raw tabs, ensuring 100% of tabs are grouped.
    * Guarantees:
    * 1. No duplicate groups (merges same/synonymous titles like Music+Music, Code+Coding, Search+Kagi).
-   * 2. Every group has >2 tabs (at least 3 tabs).
+   * 2. Preserves semantic group clusters without collapsing large tab sets into a single 'Other' group.
    * 3. Every title is at most 12 characters and has NO emojis.
    * 4. Adjacent groups have strictly alternating contrasting colors.
    */
   static reconcilePlanWithRawTabs(plan, rawTabs, granularity = 'balanced') {
-    if (!plan) plan = { groups: [] };
-    if (!plan.groups) plan.groups = [];
+    const normalizedPlan = normalizePlanGroups(plan);
     const minSize = granularityToMinSize(granularity);
 
     const assignedTabIds = new Set();
-    plan.groups.forEach(g => {
+    normalizedPlan.groups.forEach(g => {
       (g.tabIds || []).forEach(id => assignedTabIds.add(id));
     });
 
@@ -482,25 +554,77 @@ export class TabOrganizer {
     if (unassignedTabs.length > 0) {
       console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);
 
-      // Route all unassigned tabs into Other group
-      plan.groups.push({
-        title: 'Other',
-        color: 'grey',
-        rationale: 'Unassigned or standalone reference tabs',
-        tabIds: unassignedTabs.map(t => t.tabId)
-      });
+      // Cluster unassigned tabs by domain if there are multiple tabs from same domain
+      const unassignedDomainMap = new Map();
+      const trueOrphans = [];
+
+      for (const tab of unassignedTabs) {
+        let domain = '';
+        try {
+          if (tab.url) domain = new URL(tab.url).hostname.replace(/^www\./, '');
+        } catch {
+          domain = '';
+        }
+
+        // Check if domain matches an existing group
+        let matchedExisting = false;
+        if (domain) {
+          for (const grp of normalizedPlan.groups) {
+            const cleanTitle = cleanAndShortenTitle(grp.title).toLowerCase();
+            if (cleanTitle && (domain.includes(cleanTitle) || cleanTitle.includes(domain.split('.')[0]))) {
+              grp.tabIds.push(tab.tabId);
+              assignedTabIds.add(tab.tabId);
+              matchedExisting = true;
+              break;
+            }
+          }
+        }
+
+        if (!matchedExisting) {
+          if (domain && domain !== 'newtab') {
+            if (!unassignedDomainMap.has(domain)) unassignedDomainMap.set(domain, []);
+            unassignedDomainMap.get(domain).push(tab.tabId);
+          } else {
+            trueOrphans.push(tab.tabId);
+          }
+        }
+      }
+
+      // Domains with >= 2 unassigned tabs get their own named group
+      for (const [dom, ids] of unassignedDomainMap.entries()) {
+        if (ids.length >= 2) {
+          const domName = dom.split('.')[0];
+          normalizedPlan.groups.push({
+            title: domName.charAt(0).toUpperCase() + domName.slice(1, 12),
+            color: 'cyan',
+            rationale: `Tabs from ${dom}`,
+            tabIds: ids
+          });
+        } else {
+          trueOrphans.push(...ids);
+        }
+      }
+
+      if (trueOrphans.length > 0) {
+        normalizedPlan.groups.push({
+          title: 'Other',
+          color: 'grey',
+          rationale: 'Unassigned or standalone reference tabs',
+          tabIds: trueOrphans
+        });
+      }
     }
 
     // Step 1: Merge duplicates
     // Step 2: Enforce the granularity minimum tab count across the entire plan
-    plan.groups = consolidateSmallGroups(plan.groups, minSize);
+    normalizedPlan.groups = consolidateSmallGroups(normalizedPlan.groups, minSize);
 
     // Step 3: Enforce strictly alternating colors across all groups
-    applyAlternatingColors(plan.groups);
+    applyAlternatingColors(normalizedPlan.groups);
 
     // Step 4: Persist the granularity on the plan so the Apply path enforces the same min size
-    plan.granularity = granularity;
+    normalizedPlan.granularity = granularity;
 
-    return plan;
+    return normalizedPlan;
   }
 }

@@ -142,10 +142,10 @@ export const DEFAULT_SETTINGS = {
   grouping: {
     scope: 'all_windows', // 'all_windows' | 'current_window'
     consolidation: 'in_place', // 'in_place' | 'consolidate_windows'
+    analysisProfile: 'fast', // 'fast' | 'quality'
     targetGroupCount: 'auto',
     deduplication: true,
-    extractReadability: true,
-    maxTabsPerBatch: 120
+    extractReadability: true
   },
   privacyBlocklist: []
 };
