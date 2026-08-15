@@ -517,9 +517,31 @@ function renderGroupsList(groups) {
     // Header
     const header = document.createElement('div');
     header.className = 'group-card-header';
-    if (group.label) {
-      header.title = `Topic: ${group.label}`;
-    }
+    const labelTooltip = group.label ? `Topic: ${group.label}\n` : '';
+    header.title = `${labelTooltip}Middle-click header to close all tabs in this group immediately (Undo does not restore closed tabs)`;
+
+    // Suppress autoscroll cursor on middle-click
+    header.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+
+    // Middle-click to close all tabs in group
+    header.addEventListener('auxclick', async (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      const idsToClose = [...(group.tabIds || [])];
+      if (idsToClose.length > 0) {
+        try {
+          await chrome.tabs.remove(idsToClose);
+        } catch {}
+        idsToClose.forEach(id => appState.rawTabsMap.delete(id));
+      }
+      group.tabIds = [];
+      card.remove();
+      await refreshTabStats();
+    });
 
     const titleArea = document.createElement('div');
     titleArea.className = 'group-card-title-area';
@@ -579,6 +601,33 @@ function renderGroupsList(groups) {
 
       const row = document.createElement('div');
       row.className = 'tab-item-row';
+      row.title = `${tabData.title}\n(Middle-click to close tab immediately; Undo does not restore closed tabs)`;
+
+      // Suppress autoscroll cursor on middle-click
+      row.addEventListener('mousedown', (e) => {
+        if (e.button === 1) e.preventDefault();
+      });
+
+      // Middle-click to close individual tab
+      row.addEventListener('auxclick', async (e) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+
+        try {
+          await chrome.tabs.remove(tabId);
+        } catch {}
+
+        appState.rawTabsMap.delete(tabId);
+        group.tabIds = (group.tabIds || []).filter(id => id !== tabId);
+        row.remove();
+        badge.textContent = `${group.tabIds.length} tabs`;
+
+        if (group.tabIds.length === 0) {
+          card.remove();
+        }
+
+        await refreshTabStats();
+      });
 
       const defaultIcon = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
       const iconUrl = tabData.favIconUrl && !tabData.favIconUrl.startsWith('chrome://') ? tabData.favIconUrl : defaultIcon;
