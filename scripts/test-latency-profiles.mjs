@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * Lightweight regression checks for latency-profile core behavior.
- * Run with: node test-latency-profiles.mjs
+ * Run with: node scripts/test-latency-profiles.mjs
  */
 
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, LABELING_SYSTEM_PROMPT, PROVIDER_METADATA, PROVIDERS, estimateTokens } from './shared/constants.js';
-import { constructLabelingPrompt } from './background/content-distiller.js';
-import { ANALYSIS_PROFILES, AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, resolveAnalysisProfile } from './background/analysis-profile.js';
-import { labelTabsInBatches } from './background/tab-labeler.js';
-import { LLMAdapter } from './background/llm-adapter.js';
+import { DEFAULT_SETTINGS, LABELING_SYSTEM_PROMPT, PROVIDER_METADATA, PROVIDERS, estimateTokens } from '../shared/constants.js';
+import { constructLabelingPrompt } from '../background/content-distiller.js';
+import { ANALYSIS_PROFILES, AUTO_QUALITY_MAX_TABS, getRequestContextBudget, planAdaptivePass1Batches, resolveAnalysisProfile } from '../background/analysis-profile.js';
+import { labelTabsInBatches } from '../background/tab-labeler.js';
+import { LLMAdapter } from '../background/llm-adapter.js';
 
 function readPromptInputs(prompt) {
   const encoded = prompt.slice(prompt.indexOf('TABS=') + 5, prompt.indexOf('\n\nRules'));
@@ -283,7 +283,7 @@ async function testSmallTabSetProfileReresolutionDoesNotCrash() {
   try {
     // Fresh module registry entry per run: append a cache-busting query so
     // repeated suite runs still register a listener against the current mocks.
-    const serviceWorkerModule = await import(`./background/service-worker.js?t=${Date.now()}`);
+    const serviceWorkerModule = await import(`../background/service-worker.js?t=${Date.now()}`);
     void serviceWorkerModule;
     assert.ok(messageListener, 'service worker must register an onMessage listener');
 

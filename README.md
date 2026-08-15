@@ -95,9 +95,9 @@ Run the local, synthetic 150-tab benchmark against the shipped Fast-profile
 default (or pass a different positive tab count as the final argument):
 
 ```bash
-node benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
+node scripts/benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
 # Optional comparison:
-node benchmark-analysis-profiles.mjs quality qwen2.5:3b 150
+node scripts/benchmark-analysis-profiles.mjs quality qwen2.5:3b 150
 ```
 
 The JSON report records cold/warm model load, end-to-end Pass-1 and Pass-2 elapsed time, request count, retries, output stop reasons, batch count, fallback count, and coverage. Record the model, profile, context setting, and hardware alongside the report; performance is hardware- and model-dependent, so no single number is presented as universal.

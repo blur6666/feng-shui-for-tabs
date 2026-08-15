@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * Reproducible local Ollama benchmark for the two-pass tab analysis pipeline.
- * Usage: node benchmark-analysis-profiles.mjs [fast|quality] [model] [tabCount]
- * Example: node benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
+ * Usage: node scripts/benchmark-analysis-profiles.mjs [fast|quality] [model] [tabCount]
+ * Example: node scripts/benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
  */
 
-import { JSON_SCHEMA, SYSTEM_PROMPT } from './shared/constants.js';
-import { constructClusteringPrompt } from './background/content-distiller.js';
-import { labelTabsInBatches } from './background/tab-labeler.js';
-import { planPass2Budget, resolveAnalysisProfile } from './background/analysis-profile.js';
-import { LLMAdapter } from './background/llm-adapter.js';
+import { JSON_SCHEMA, SYSTEM_PROMPT } from '../shared/constants.js';
+import { constructClusteringPrompt } from '../background/content-distiller.js';
+import { labelTabsInBatches } from '../background/tab-labeler.js';
+import { planPass2Budget, resolveAnalysisProfile } from '../background/analysis-profile.js';
+import { LLMAdapter } from '../background/llm-adapter.js';
 
 const profileName = process.argv[2] === 'quality' ? 'quality' : 'fast';
 const model = process.argv[3] || 'qwen2.5:3b';
