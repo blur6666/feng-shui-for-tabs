@@ -130,9 +130,12 @@ export function planAdaptivePass1Batches(records, { settings, profile, createPro
   return batches;
 }
 
-export function planPass2Budget(prompt, settings, profile, systemPrompt = '') {
+export function planPass2Budget(prompt, settings, profile, systemPrompt = '', tabCount = 0) {
   const estimatedPromptTokens = estimateTokens(`${prompt}\n${systemPrompt || ''}`);
-  const outputReserve = profile.pass2OutputTokens;
+  const scaledOutput = tabCount > 0
+    ? Math.max(profile.pass2OutputTokens, Math.min(3500, Math.ceil(tabCount * 22) + 800))
+    : profile.pass2OutputTokens;
+  const outputReserve = scaledOutput;
   return {
     estimatedPromptTokens,
     outputReserve,

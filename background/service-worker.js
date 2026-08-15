@@ -330,7 +330,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 payload?.granularity || 'balanced',
                 profile
               );
-              const pass2Budget = planPass2Budget(clusterPrompt, mergedSettings, profile, SYSTEM_PROMPT);
+              const pass2Budget = planPass2Budget(clusterPrompt, mergedSettings, profile, SYSTEM_PROMPT, labeledTabs.length);
               if (!pass2Budget.fits) {
                 throw new Error(`Pass 2 cannot fit ${pass2Budget.estimatedPromptTokens} prompt tokens plus ${pass2Budget.outputReserve} reserved output tokens within the ${pass2Budget.configuredCap} token ${profile.label} context cap.`);
               }
@@ -355,8 +355,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 keepAlive: profile.keepAlive,
                 onTokenChunk: tokenChunk => emitProgress({ stage: 'streaming', chunk: tokenChunk, profile: profile.id })
               };
-              const groupingResult = await LLMAdapter.generateGroupingPlan(clusterPrompt, mergedSettings, pass2Options);
-              plan = groupingResult.value;
+
+              try {
+                const groupingResult = await LLMAdapter.generateGroupingPlan(clusterPrompt, mergedSettings, pass2Options);
+                plan = groupingResult.value;
+              } catch (groupingError) {
+                if (runController.signal.aborted) throw groupingError;
+                console.warn('[ServiceWorker] Pass 2 LLM grouping failed, building semantic fallback groups:', groupingError.message);
+                // Build a fallback plan directly from the Pass 1 labeled subjects and entities
+                const fallbackGroupsMap = new Map();
+                for (const t of labeledTabs) {
+                  const key = (t.entity || t.subject || 'Reference').trim();
+                  if (!fallbackGroupsMap.has(key)) fallbackGroupsMap.set(key, []);
+                  fallbackGroupsMap.get(key).push(t.id);
+                }
+                const fallbackGroups = Array.from(fallbackGroupsMap.entries()).map(([title, ids]) => ({
+                  title,
+                  label: title,
+                  color: 'blue',
+                  rationale: `Grouped by semantic topic (${title})`,
+                  tabIds: ids
+                }));
+                plan = {
+                  summary: 'Tabs organized from semantic topic analysis.',
+                  groups: fallbackGroups,
+                  warning: `Note: Pass 2 clustering recovered from a model formatting error (${groupingError.message}).`
+                };
+              }
               throwIfCancelled(runController.signal);
 
               // Quality mode preserves the existing correction retry. Fast mode

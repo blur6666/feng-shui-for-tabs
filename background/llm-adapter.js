@@ -156,7 +156,135 @@ function parseOllamaMetrics(record = {}) {
   };
 }
 
-// Helper to extract clean JSON from LLM output (handles code fences, preamble, thought tags)
+// Helper to extract and repair clean JSON from LLM output (handles truncation, code fences, preamble, thought tags)
+export function repairTruncatedJson(str) {
+  if (!str || typeof str !== 'string') return str;
+  let text = str.trim();
+
+  // Strip <think>...</think> tags if reasoning models like DeepSeek-R1 output thoughts
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Find outermost { or [
+  const firstOpenBrace = text.indexOf('{');
+  const firstOpenBracket = text.indexOf('[');
+  let startIdx = 0;
+  if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+    startIdx = firstOpenBrace;
+  } else if (firstOpenBracket !== -1) {
+    startIdx = firstOpenBracket;
+  }
+  text = text.slice(startIdx);
+
+  // Clean trailing markdown fences or whitespace
+  text = text.replace(/```(?:json)?\s*$/g, '').trim();
+
+  // Step 1: Check if clean text already parses
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  // Step 2: Remove trailing commas and comments
+  const cleaned = text
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/\/\*[\s\S]*?\*\/|([^:]|^)\/\/.*$/gm, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  // Step 3: Handle truncated responses by repairing unclosed quotes and brackets
+  let inString = false;
+  let escaped = false;
+  const stack = [];
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (inString) {
+      if (char === '\\' && !escaped) {
+        escaped = true;
+      } else {
+        if (char === '"' && !escaped) inString = false;
+        escaped = false;
+      }
+    } else {
+      if (char === '"') inString = true;
+      else if (char === '{' || char === '[') stack.push(char);
+      else if (char === '}' && stack.length > 0 && stack[stack.length - 1] === '{') stack.pop();
+      else if (char === ']' && stack.length > 0 && stack[stack.length - 1] === '[') stack.pop();
+    }
+  }
+
+  let repaired = cleaned;
+  if (inString) repaired += '"';
+
+  // Strip dangling unclosed keys or trailing colons/commas
+  repaired = repaired
+    .replace(/,\s*"[^"]*"\s*:\s*$/g, '')
+    .replace(/,\s*"[^"]*"\s*$/g, '')
+    .replace(/:\s*$/g, ': null')
+    .replace(/,\s*$/g, '');
+
+  // Recalculate closing tokens
+  inString = false;
+  escaped = false;
+  const closeStack = [];
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (inString) {
+      if (char === '\\' && !escaped) escaped = true;
+      else {
+        if (char === '"' && !escaped) inString = false;
+        escaped = false;
+      }
+    } else {
+      if (char === '"') inString = true;
+      else if (char === '{' || char === '[') closeStack.push(char === '{' ? '}' : ']');
+      else if (char === '}' || char === ']') {
+        if (closeStack.length > 0 && closeStack[closeStack.length - 1] === char) {
+          closeStack.pop();
+        }
+      }
+    }
+  }
+
+  while (closeStack.length > 0) {
+    repaired += closeStack.pop();
+  }
+  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+
+  try {
+    return JSON.parse(repaired);
+  } catch (err) {
+    // Step 4: Salvage array matches if root object is truncated
+    const groupsMatch = text.match(/"groups"\s*:\s*\[([\s\S]*)/);
+    if (groupsMatch) {
+      const arrayText = groupsMatch[1];
+      const objectRegex = /\{[^{}]*?"title"[^{}]*?"tabIds"[^{}]*?\}/g;
+      const matches = arrayText.match(objectRegex);
+      if (matches && matches.length > 0) {
+        try {
+          const parsedGroups = matches.map(m => JSON.parse(m.replace(/,\s*([}\]])/g, '$1')));
+          return { summary: 'Auto-repaired grouping plan', groups: parsedGroups };
+        } catch {}
+      }
+    }
+
+    const tabsMatch = text.match(/"tabs"\s*:\s*\[([\s\S]*)/);
+    if (tabsMatch) {
+      const arrayText = tabsMatch[1];
+      const objectRegex = /\{[^{}]*?"id"[^{}]*?"subject"[^{}]*?\}/g;
+      const matches = arrayText.match(objectRegex);
+      if (matches && matches.length > 0) {
+        try {
+          const parsedTabs = matches.map(m => JSON.parse(m.replace(/,\s*([}\]])/g, '$1')));
+          return { tabs: parsedTabs };
+        } catch {}
+      }
+    }
+
+    throw new Error(`Failed to parse LLM JSON output: ${err.message}`);
+  }
+}
+
 export function extractJsonFromResponse(rawText) {
   if (!rawText) throw new Error('Empty response received from LLM.');
 
@@ -166,41 +294,18 @@ export function extractJsonFromResponse(rawText) {
   // Try direct parse
   try {
     return JSON.parse(withoutThoughts);
-  } catch {
-    // Continue
-  }
+  } catch {}
 
   // Look for ```json ... ``` blocks
   const codeBlockMatch = withoutThoughts.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (codeBlockMatch && codeBlockMatch[1]) {
     try {
       return JSON.parse(codeBlockMatch[1].trim());
-    } catch {
-      // Continue
-    }
+    } catch {}
   }
 
-  // Find outermost curly braces
-  const firstOpen = withoutThoughts.indexOf('{');
-  const lastClose = withoutThoughts.lastIndexOf('}');
-  if (firstOpen !== -1 && lastClose > firstOpen) {
-    const jsonCandidate = withoutThoughts.substring(firstOpen, lastClose + 1);
-    try {
-      return JSON.parse(jsonCandidate);
-    } catch (err) {
-      // Attempt common fixes: remove trailing commas before closing braces/brackets
-      const cleaned = jsonCandidate
-        .replace(/,\s*([}\]])/g, '$1')
-        .replace(/\/\*[\s\S]*?\*\/|([^:]|^)\/\/.*$/gm, '');
-      try {
-        return JSON.parse(cleaned);
-      } catch {
-        throw new Error(`Failed to parse LLM JSON output: ${err.message}`);
-      }
-    }
-  }
-
-  throw new Error('No valid JSON object found in LLM response.');
+  // Use repair engine
+  return repairTruncatedJson(withoutThoughts);
 }
 
 export class LLMAdapter {

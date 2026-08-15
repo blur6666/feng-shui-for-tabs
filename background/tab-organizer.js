@@ -241,6 +241,7 @@ export function normalizePlanGroups(plan) {
 
   return {
     summary: plan.summary || '',
+    warning: plan.warning || undefined,
     groups: normalized,
     suggestedActions: Array.isArray(plan.suggestedActions) ? plan.suggestedActions : []
   };
