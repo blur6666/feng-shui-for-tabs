@@ -5,7 +5,8 @@
 
 import { DEFAULT_SETTINGS, MESSAGE_TYPES, SYSTEM_PROMPT, estimateTokens } from '../shared/constants.js';
 import { collectAllTabs } from './tab-collector.js';
-import { distillTabsForPrompt, constructAnalysisPrompt } from './content-distiller.js';
+import { distillTabsForPrompt, constructClusteringPrompt } from './content-distiller.js';
+import { labelTabsInBatches } from './tab-labeler.js';
 import { LLMAdapter } from './llm-adapter.js';
 import { TabOrganizer } from './tab-organizer.js';
 
@@ -169,42 +170,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
           }
 
-          // Step 2: Distill Data & Token Budgeting
+          // Step 2: Distill Data
           chrome.runtime.sendMessage({
             type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
-            payload: { stage: 'distilling', message: 'Distilling content and building context window payload...' }
+            payload: { stage: 'distilling', message: 'Distilling content from open tabs...' }
           }).catch(() => {});
 
           const distilled = distillTabsForPrompt(tabData.tabs, { maxSnippetLength: 220 });
-          const prompt = constructAnalysisPrompt(distilled, payload?.customInstructions || '');
-          const estimatedTokens = estimateTokens(prompt + '\n' + (SYSTEM_PROMPT || ''));
-          const maxContext = Number(mergedSettings.ollama?.num_ctx) || 32768;
 
-          // Step 3: Stream to Local LLM
-          chrome.runtime.sendMessage({
-            type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
-            payload: {
-              stage: 'thinking',
-              estimatedTokens,
-              maxContext,
-              message: `Synthesizing ${tabData.tabs.length} tabs with ${(mergedSettings.provider || 'AI').toUpperCase()} (~ ${estimatedTokens} / ${maxContext} ctx tokens)...`
+          // Step 3: Pass 1 - Batched Semantic Labeling
+          const { labeledTabs, junkActions } = await labelTabsInBatches(
+            distilled,
+            mergedSettings,
+            (progress) => {
+              chrome.runtime.sendMessage({
+                type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
+                payload: progress
+              }).catch(() => {});
             }
-          }).catch(() => {});
+          );
 
-          const plan = await LLMAdapter.generateGroupingPlan(prompt, mergedSettings, (tokenChunk, accumulatedText) => {
+          // Step 4: Pass 2 - Synthesize & Cluster Clean Labeled Tabs
+          let plan;
+          if (labeledTabs.length > 0) {
+            const clusterPrompt = constructClusteringPrompt(labeledTabs, payload?.customInstructions || '');
+            const estimatedTokens = estimateTokens(clusterPrompt + '\n' + (SYSTEM_PROMPT || ''));
+            const maxContext = Number(mergedSettings.ollama?.num_ctx) || 32768;
+
             chrome.runtime.sendMessage({
               type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
-              payload: { stage: 'streaming', chunk: tokenChunk, accumulatedText }
+              payload: {
+                stage: 'thinking',
+                estimatedTokens,
+                maxContext,
+                message: `Pass 2/2: Clustering ${labeledTabs.length} semantic topics (~ ${estimatedTokens} / ${maxContext} ctx tokens)...`
+              }
             }).catch(() => {});
-          });
 
-          // Step 4: Reconcile and guarantee 100% tab grouping coverage
+            plan = await LLMAdapter.generateGroupingPlan(clusterPrompt, mergedSettings, (tokenChunk, accumulatedText) => {
+              chrome.runtime.sendMessage({
+                type: MESSAGE_TYPES.ANALYSIS_PROGRESS,
+                payload: { stage: 'streaming', chunk: tokenChunk, accumulatedText }
+              }).catch(() => {});
+            });
+          } else {
+            plan = { summary: 'All open tabs categorized as operational or duplicates.', groups: [] };
+          }
+
+          // Step 5: Reconcile and guarantee 100% tab grouping coverage
           const completePlan = TabOrganizer.reconcilePlanWithRawTabs(plan, tabData.tabs);
 
-          // Merge duplicate detection actions from collector if any
-          if (tabData.duplicateActions && tabData.duplicateActions.length > 0) {
-            completePlan.suggestedActions = [...(completePlan.suggestedActions || []), ...tabData.duplicateActions];
-          }
+          // Merge suggested actions: junk tabs and duplicates (deduplicated by tabId)
+          const combinedActions = [
+            ...(completePlan.suggestedActions || []),
+            ...(junkActions || []),
+            ...(tabData.duplicateActions || [])
+          ];
+          const seenActionTabs = new Set();
+          completePlan.suggestedActions = combinedActions.filter(act => {
+            if (!act.tabId) return true;
+            if (seenActionTabs.has(act.tabId)) return false;
+            seenActionTabs.add(act.tabId);
+            return true;
+          });
 
           // Send final response
           sendResponse({

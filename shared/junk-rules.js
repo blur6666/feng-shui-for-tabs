@@ -27,9 +27,9 @@ export function isScriptableUrl(url) {
  */
 export function detectNewTabOrExtension(tab) {
   const url = (tab?.url || '').toLowerCase();
-  if (!url) return 'new_tab';
+  const title = (tab?.title || '').toLowerCase();
 
-  if (url === 'about:blank' || url.startsWith('chrome://newtab') || url.startsWith('edge://newtab')) {
+  if (url === 'about:blank' || url.startsWith('chrome://newtab') || url.startsWith('edge://newtab') || title === 'new tab') {
     return 'new_tab';
   }
 

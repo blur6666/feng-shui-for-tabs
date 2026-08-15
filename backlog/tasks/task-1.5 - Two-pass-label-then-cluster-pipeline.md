@@ -1,10 +1,11 @@
 ---
 id: TASK-1.5
 title: Two-pass label then cluster pipeline
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@agent'
 created_date: '2026-08-15 10:48'
-updated_date: '2026-08-15 13:26'
+updated_date: '2026-08-15 13:42'
 labels:
   - grouping
 milestone: m-0
@@ -30,12 +31,30 @@ A single call asking a 12B model to both understand ~250 pages and design a taxo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pass 1 returns {id, subject, entity, intent, junkType} for every tab in a batch; subject describes what the page is about, never the site name
-- [ ] #2 Batches run sequentially (~20 tabs each) and ANALYSIS_PROGRESS events fire per batch, reusing the existing stage:'distilling'/'thinking' events consumed by sidepanel/app.js
-- [ ] #3 Missing ids from a pass-1 batch are retried once, then defaulted rather than dropped silently
-- [ ] #4 Tabs with a non-null junkType never appear in plan.groups; they are converted to suggestedActions entries instead
-- [ ] #5 Pass 2 clusters only on {subject, entity, intent} and returns title (<=12 chars, pre-abbreviated by the LLM), label (full name), rationale, tabIds, color
-- [ ] #6 No single call exceeds the token budget from TASK-1.4, at 30, 120, and 250 tab counts
-- [ ] #7 label is added to JSON_SCHEMA in shared/constants.js
-- [ ] #8 Ollama requests in both pass 1 and pass 2 pass format: 'json' to ensure deterministic JSON parsing on local models like Gemma 12B
+- [x] #1 Pass 1 returns {id, subject, entity, intent, junkType} for every tab in a batch; subject describes what the page is about, never the site name
+- [x] #2 Batches run sequentially (~20 tabs each) and ANALYSIS_PROGRESS events fire per batch, reusing the existing stage:'distilling'/'thinking' events consumed by sidepanel/app.js
+- [x] #3 Missing ids from a pass-1 batch are retried once, then defaulted rather than dropped silently
+- [x] #4 Tabs with a non-null junkType never appear in plan.groups; they are converted to suggestedActions entries instead
+- [x] #5 Pass 2 clusters only on {subject, entity, intent} and returns title (<=12 chars, pre-abbreviated by the LLM), label (full name), rationale, tabIds, color
+- [x] #6 No single call exceeds the token budget from TASK-1.4, at 30, 120, and 250 tab counts
+- [x] #7 label is added to JSON_SCHEMA in shared/constants.js
+- [x] #8 Ollama requests in both pass 1 and pass 2 pass format: 'json' to ensure deterministic JSON parsing on local models like Gemma 12B
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Update shared/constants.js with LABELING_SYSTEM_PROMPT, CLUSTERING_SYSTEM_PROMPT, LABELING_JSON_SCHEMA, and update JSON_SCHEMA to include group label field
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented Two-Pass Label-then-Cluster architecture. Added background/tab-labeler.js with sequential ~20 tab batching, single retry for missing IDs, deterministic junk pre-tagging, and junk routing to Suggested Actions. Updated background/service-worker.js, background/llm-adapter.js, and background/content-distiller.js. Verified against all 8 ACs with automated test runner.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented Two-Pass Label-then-Cluster architecture: Pass 1 labels tabs in batches (~20 tabs/call) with entity, intent, and junk routing; Pass 2 clusters compact semantic labels with <=12 char titles and full topic labels.
+<!-- SECTION:FINAL_SUMMARY:END -->
