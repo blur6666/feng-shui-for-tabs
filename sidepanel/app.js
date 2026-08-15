@@ -28,6 +28,7 @@ const elements = {
   btnSettings: document.getElementById('btn-settings'),
   btnCloseSettings: document.getElementById('btn-close-settings'),
   settingsModal: document.getElementById('settings-modal'),
+  selectGranularity: document.getElementById('select-granularity'),
   selectScope: document.getElementById('select-scope'),
   selectConsolidation: document.getElementById('select-consolidation'),
   inputInstructions: document.getElementById('input-instructions'),
@@ -96,9 +97,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Load Settings from Storage
 async function loadSettings() {
-  const data = await chrome.storage.local.get('settings');
+  const data = await chrome.storage.local.get(['settings', 'granularity']);
   if (data.settings) {
     appState.settings = { ...DEFAULT_SETTINGS, ...data.settings };
+  }
+  if (data.granularity && elements.selectGranularity) {
+    elements.selectGranularity.value = data.granularity;
   }
   updateSettingsUI();
   updateMainUIState();
@@ -242,6 +246,13 @@ function setupEventListeners() {
   elements.btnCloseSettings.addEventListener('click', () => {
     elements.settingsModal.classList.add('hidden');
   });
+
+  // Granularity change listener
+  if (elements.selectGranularity) {
+    elements.selectGranularity.addEventListener('change', (e) => {
+      chrome.storage.local.set({ granularity: e.target.value });
+    });
+  }
 
   // Dropdown provider change
   if (elements.selectProvider) {
@@ -413,9 +424,10 @@ async function startAnalysis() {
       }
     };
 
+    const granularity = elements.selectGranularity ? elements.selectGranularity.value : 'balanced';
     const response = await chrome.runtime.sendMessage({
       type: MESSAGE_TYPES.ANALYZE_TABS,
-      payload: { customInstructions, settings }
+      payload: { customInstructions, settings, granularity }
     });
 
     if (!response || !response.success) {

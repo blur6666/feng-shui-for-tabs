@@ -72,6 +72,14 @@
     <section class="action-card">
       <div class="options-row">
         <div class="option-field">
+          <label for="select-granularity">Granularity</label>
+          <select id="select-granularity" class="form-select">
+            <option value="broad">Broad (2–4 groups)</option>
+            <option value="balanced" selected>Balanced (4–8 groups)</option>
+            <option value="detailed">Detailed (8+ groups)</option>
+          </select>
+        </div>
+        <div class="option-field">
           <label for="select-scope">Scope</label>
           <select id="select-scope" class="form-select">
             <option value="all_windows">All Windows</option>
@@ -81,8 +89,8 @@
         <div class="option-field">
           <label for="select-consolidation">Placement</label>
           <select id="select-consolidation" class="form-select">
-            <option value="in_place">Group In-Place</option>
-            <option value="consolidate_windows">Consolidate Windows</option>
+            <option value="in_place">In-Place</option>
+            <option value="consolidate_windows">Consolidate</option>
           </select>
         </div>
       </div>

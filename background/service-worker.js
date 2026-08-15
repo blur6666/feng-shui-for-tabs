@@ -193,7 +193,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Step 4: Pass 2 - Synthesize & Cluster Clean Labeled Tabs
           let plan;
           if (labeledTabs.length > 0) {
-            const clusterPrompt = constructClusteringPrompt(labeledTabs, payload?.customInstructions || '');
+            const clusterPrompt = constructClusteringPrompt(labeledTabs, payload?.customInstructions || '', payload?.granularity || 'balanced');
             const estimatedTokens = estimateTokens(clusterPrompt + '\n' + (SYSTEM_PROMPT || ''));
             const maxContext = Number(mergedSettings.ollama?.num_ctx) || 32768;
 

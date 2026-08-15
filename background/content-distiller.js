@@ -101,7 +101,7 @@ Return JSON matching:
 /**
  * Builds the Pass 2 prompt for clustering labeled tabs into coherent Chrome Tab Groups.
  */
-export function constructClusteringPrompt(labeledTabs, userInstructions = '') {
+export function constructClusteringPrompt(labeledTabs, userInstructions = '', granularity = 'balanced') {
   const tabJsonString = JSON.stringify(labeledTabs, null, 2);
 
   let prompt = `Here are the semantic labels for all open tabs (${labeledTabs.length} tabs):\n\n`;
@@ -111,14 +111,23 @@ export function constructClusteringPrompt(labeledTabs, userInstructions = '') {
     prompt += `User Custom Instructions: "${userInstructions.trim()}"\n\n`;
   }
 
+  let granularityRule = '';
+  if (granularity === 'broad') {
+    granularityRule = '- GRANULARITY: BROAD / MINIMALIST. Target 2 to 4 broad, high-level umbrella groups (e.g., Work, Personal, Shopping, Learning). Merge sub-topics into broad groups. Minimum group size: 2 tabs.';
+  } else if (granularity === 'detailed') {
+    granularityRule = '- GRANULARITY: DETAILED / ATOMIC. Target 8+ specific, focused groups. Separate individual projects, separate bugs/issues, specific documentation topics, and distinct purchase items. Minimum group size: 2 tabs.';
+  } else {
+    granularityRule = '- GRANULARITY: BALANCED / STANDARD. Target 4 to 8 coherent subject groups. Minimum group size: 3 tabs.';
+  }
+
   prompt += `Synthesize the tabs above into coherent subject-based groups.\n
 CRITICAL GROUPING & TAXONOMY RULES:
 - GROUP BY SUBJECT / TASK, NOT BY WEBSITE.
   Worked Example: An r/airfryer discussion, an online air fryer product listing, and a video air fryer review belong in ONE group ('Air Fryer'). Two unrelated Wikipedia articles belong in DIFFERENT groups based on their distinct topics.
+${granularityRule}
 - "title": AT MOST 12 CHARACTERS and 1-2 words. Abbreviate if needed (e.g., 'Air Fryer', 'Rust Bugs', 'Tokyo Trip', 'ML AirFryer').
 - "label": Full descriptive topic label (e.g., 'Philips Air Fryer Research').
 - STRICTLY NO EMOJIS in titles or labels.
-- Minimum 3 tabs per group. Never create 1 or 2 tab groups. Merge small topics into broader themes or 'Other'.
 - EVERY single tab ID from the input must be included in exactly one group. Do not omit any ID.
 - Assign alternating colors ('blue', 'orange', 'green', 'pink', 'cyan', 'red', 'yellow', 'purple', 'grey').
 
