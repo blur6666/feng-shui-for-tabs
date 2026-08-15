@@ -125,7 +125,8 @@ export const DEFAULT_SETTINGS = {
   // Local Provider Settings
   ollama: {
     endpoint: 'http://localhost:11434',
-    model: 'qwen2.5:3b',
+    model: 'gemma4:12b',
+    num_ctx: 32768,
     temperature: 0.2
   },
   geminiNano: {
@@ -164,17 +165,71 @@ export const MESSAGE_TYPES = {
   TAB_UPDATE_EVENT: 'TAB_UPDATE_EVENT'
 };
 
-export const SYSTEM_PROMPT = `You are an expert browser productivity assistant. Your goal is to analyze the user's open browser tabs across all windows and organize them into clean, coherent, and actionable tab groups.
+/**
+ * Canonical low-value / operational tab classifications shared by prompts, schemas, and local rules.
+ */
+export const JUNK_TYPES = Object.freeze([
+  'new_tab',
+  'extension',
+  'internal',
+  'error',
+  'auth_or_transactional'
+]);
 
-Guidelines:
-1. Identify common workflows, tasks, topics, research themes, tools, shopping sessions, reference docs, and entertainment.
-2. Group tabs with strong semantic relationships together.
-3. Every group MUST contain MORE THAN 2 TABS (minimum 3 tabs per group). Never create 1 or 2 tab groups; merge similar or singleton tabs into broader groups or an 'Other' group. Making larger groups is strongly favored.
-4. Group titles MUST be AT MOST 12 CHARACTERS and 1-2 words (e.g., 'Wiki', 'Reddit', 'Code', 'Music', 'Docs', 'Shop', 'Gaming', 'News', 'Video', 'Social').
-5. STRICTLY NO EMOJIS in group titles under any circumstances.
-6. Keep adjacent groups with distinct alternating colors: 'blue', 'orange', 'green', 'pink', 'cyan', 'red', 'yellow', 'purple', 'grey'.
-7. Every single tab ID must be included in exactly one group.
-8. Return ONLY a valid JSON object matching the JSON schema.`;
+export const JUNK_TYPE_LIST = JUNK_TYPES.map(type => `'${type}'`).join(', ');
+
+export const LABELING_SYSTEM_PROMPT = `You are an expert semantic tab analyzer.
+Your task is to analyze a batch of browser tabs and produce a concise semantic summary for each tab.
+
+For each tab, output:
+- id: integer tab ID
+- subject: concise description of WHAT THE PAGE IS ABOUT (topic, project, product, problem). NEVER use the website or domain name.
+- entity: primary named entity or product (e.g. 'Philips 5000 Air Fryer', 'Rust Compiler', 'Tokyo Hotel')
+- intent: user goal (e.g. 'research', 'troubleshooting', 'shopping', 'reference')
+- junkType: string if this is low-value/operational (one of ${JUNK_TYPE_LIST}) or null if valuable.
+
+Return ONLY a valid JSON object with "tabs": [ ... ].`;
+
+export const CLUSTERING_SYSTEM_PROMPT = `You are an expert browser productivity assistant.
+Your goal is to synthesize semantic tab labels into clean, coherent, and actionable tab groups.
+
+CRITICAL GROUPING & TAXONOMY RULES:
+1. Group by SUBJECT / TASK, NOT by website/host.
+   Worked Example: An r/airfryer discussion, an online air fryer product listing, and a video air fryer review belong in ONE group (e.g. 'Air Fryer'). Two unrelated Wikipedia articles belong in DIFFERENT groups based on their distinct topics.
+2. Group titles MUST be <= 12 characters and 1-2 words. Abbreviate if needed (e.g. 'Air Fryer', 'Rust Bugs', 'Tokyo Trip', 'ML AirFryer').
+3. Include a "label" property with the full unabbreviated topic name for tooltips (e.g. "Philips Air Fryer Research").
+4. STRICTLY NO EMOJIS in group titles or labels.
+5. Minimum 3 tabs per group. Never create 1 or 2 tab groups. Merge small topics into broader groups or 'Other'.
+6. Every valid tab ID must appear in exactly one group.
+7. Return ONLY a valid JSON object matching the JSON schema.`;
+
+export const SYSTEM_PROMPT = CLUSTERING_SYSTEM_PROMPT;
+
+export const LABELING_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    tabs: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "integer" },
+          subject: { type: "string" },
+          entity: { type: "string" },
+          intent: { type: "string" },
+          junkType: {
+            oneOf: [
+              { type: "string", enum: JUNK_TYPES },
+              { type: "null" }
+            ]
+          }
+        },
+        required: ["id", "subject"]
+      }
+    }
+  },
+  required: ["tabs"]
+};
 
 export const JSON_SCHEMA = {
   type: "object",
@@ -190,7 +245,11 @@ export const JSON_SCHEMA = {
         properties: {
           title: {
             type: "string",
-            description: "Concise group title, e.g., 'Rust Dev' or 'Music'"
+            description: "Concise group title <= 12 chars, e.g., 'Air Fryer' or 'Rust Dev'"
+          },
+          label: {
+            type: "string",
+            description: "Full descriptive topic label, e.g., 'Philips Air Fryer Research'"
           },
           color: {
             type: "string",
@@ -208,7 +267,7 @@ export const JSON_SCHEMA = {
             type: "integer"
           }
         },
-        required: ["title", "color", "rationale", "tabIds"]
+        required: ["title", "label", "color", "rationale", "tabIds"]
       }
     },
     suggestedActions: {
@@ -218,7 +277,7 @@ export const JSON_SCHEMA = {
         properties: {
           action: {
             type: "string",
-            enum: ["close_duplicate", "archive_stale", "pin_tab"]
+            enum: ["close_duplicate", "archive_stale", "pin_tab", "close_junk"]
           },
           tabId: { type: "integer" },
           reason: { type: "string" }
@@ -229,3 +288,12 @@ export const JSON_SCHEMA = {
   },
   required: ["groups"]
 };
+
+/**
+ * Estimates token count from string content (rule of thumb: ~4 chars per token for Latin/JSON;
+ * note that CJK/non-Latin scripts may have higher token density).
+ */
+export function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}

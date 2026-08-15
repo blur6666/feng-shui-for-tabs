@@ -18,60 +18,138 @@ const CONTRAST_PALETTE = [
   'grey'
 ];
 
+const SITE_TOKENS = [
+  'reddit', 'wiki', 'wikipedia', 'youtube', 'github', 'gitlab',
+  'amazon', 'mercado livre', 'mercadolivre', 'twitch', 'stackoverflow',
+  'stackexchange', 'google', 'bing', 'twitter', 'facebook', 'instagram',
+  'threads', 'ebay', 'fandom', 'steam'
+];
+
 /**
- * Strips all emojis, TLDs, and maps synonyms to canonical <= 12 char titles.
+ * Validates a grouping plan against anti-site and anti-duplicate rules.
+ * @param {object} plan
+ * @param {Array<object>} labeledTabs
+ * @returns {{ valid: boolean, violations: string[] }}
+ */
+export function validateGroupingPlan(plan, labeledTabs = []) {
+  const violations = [];
+  if (!plan || !plan.groups || plan.groups.length === 0) {
+    return { valid: true, violations: [] };
+  }
+
+  const tabMap = new Map((labeledTabs || []).map(t => [t.id, t]));
+  const seenTitles = new Map();
+  const seenLabels = new Map();
+
+  for (let i = 0; i < plan.groups.length; i++) {
+    const group = plan.groups[i];
+    const rawTitle = (group.title || '').trim().toLowerCase();
+    const rawLabel = (group.label || group.title || '').trim().toLowerCase();
+    const tabIds = group.tabIds || [];
+
+    // 1. Check title against known site tokens
+    for (const site of SITE_TOKENS) {
+      if (rawTitle === site || rawTitle === site.replace(/\s+/g, '') || rawTitle.startsWith(site + ' ') || rawTitle.endsWith(' ' + site)) {
+        violations.push(`Group "${group.title}" is named after website "${site}" rather than a topic`);
+        break;
+      }
+    }
+
+    // 2. Check if tabs are >80% one domain but span multiple distinct subjects
+    if (tabIds.length >= 3) {
+      const domainCounts = new Map();
+      const distinctSubjects = new Set();
+
+      for (const id of tabIds) {
+        const tab = tabMap.get(id);
+        if (tab) {
+          const domain = (tab.domain || '').toLowerCase();
+          if (domain) domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+          if (tab.subject) distinctSubjects.add(tab.subject.toLowerCase().trim());
+        }
+      }
+
+      for (const [dom, count] of domainCounts.entries()) {
+        const share = count / tabIds.length;
+        if (share > 0.8 && distinctSubjects.size >= 3) {
+          violations.push(`Group "${group.title}" contains ${Math.round(share * 100)}% tabs from ${dom} but spans ${distinctSubjects.size} distinct subjects`);
+          break;
+        }
+      }
+    }
+
+    // 3. Duplicate checks
+    const normTitle = rawTitle.replace(/[^\w]/g, '');
+    const normLabel = rawLabel.replace(/[^\w]/g, '');
+
+    if (normTitle && seenTitles.has(normTitle)) {
+      violations.push(`Duplicate group theme detected between group #${seenTitles.get(normTitle) + 1} and group #${i + 1} ("${group.title}")`);
+    } else if (normTitle) {
+      seenTitles.set(normTitle, i);
+    }
+
+    if (normLabel && seenLabels.has(normLabel)) {
+      violations.push(`Duplicate group label detected between group #${seenLabels.get(normLabel) + 1} and group #${i + 1} ("${group.label}")`);
+    } else if (normLabel) {
+      seenLabels.set(normLabel, i);
+    }
+  }
+
+  return {
+    valid: violations.length === 0,
+    violations
+  };
+}
+
+/**
+ * Strips emojis, control characters, and trims to <= 12 characters respecting word boundaries
+ * where possible (falling back to a 12-char slice if the first word itself exceeds 12 chars)
+ * without substituting the subject chosen by the LLM.
  */
 export function cleanAndShortenTitle(rawTitle) {
   if (!rawTitle) return 'Other';
 
-  // 1. Remove emojis, symbols, and surrogate pairs
+  // 1. Remove emojis, symbols, surrogate pairs, and control characters
   let title = rawTitle
     .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '')
-    .replace(/\.(com|org|net|io|dev|app|ai|wiki|edu|gov|co|uk|de|gg)/gi, '') // strip domain TLDs
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // control chars
     .replace(/[^\w\s\-/]/g, '') // remove special punctuation
     .trim();
 
   const lower = title.toLowerCase();
+  if (!title || lower === 'other' || lower === 'misc' || lower === 'uncategorized') return 'Other';
 
-  // 2. Canonical Semantic Normalization (unifies synonyms & domains)
-  if (lower.includes('wikipedia') || lower.includes('wiki') || lower.includes('fandom') || lower.includes('gamepedia')) return 'Wiki';
-  if (lower.includes('reddit')) return 'Reddit';
-  if (lower.includes('youtube') || lower.includes('twitch') || lower.includes('video') || lower.includes('stream') || lower.includes('watch') || lower.includes('netflix')) return 'Video';
-  if (lower.includes('github') || lower.includes('gitlab') || lower.includes('code') || lower.includes('coding') || lower.includes('dev') || lower.includes('repo') || lower.includes('program')) return 'Code';
-  if (lower.includes('stackoverflow') || lower.includes('stackexchange') || lower.includes('docs') || lower.includes('documentation') || lower.includes('reference') || lower.includes('manual')) return 'Docs';
-  if (lower.includes('amazon') || lower.includes('ebay') || lower.includes('shop') || lower.includes('store') || lower.includes('product') || lower.includes('buy') || lower.includes('cart')) return 'Shop';
-  if (lower.includes('songsterr') || lower.includes('ableton') || lower.includes('music') || lower.includes('piano') || lower.includes('guitar') || lower.includes('theory') || lower.includes('audio') || lower.includes('spotify') || lower.includes('sound') || lower.includes('chords')) return 'Music';
-  if (lower.includes('game') || lower.includes('gaming') || lower.includes('steam') || lower.includes('poe') || lower.includes('quest') || lower.includes('rpg') || lower.includes('ign')) return 'Gaming';
-  if (lower.includes('news') || lower.includes('article') || lower.includes('journal') || lower.includes('post') || lower.includes('blog')) return 'News';
-  if (lower.includes('mail') || lower.includes('gmail') || lower.includes('email') || lower.includes('inbox') || lower.includes('outlook')) return 'Mail';
-  if (lower.includes('twitter') || lower.includes('facebook') || lower.includes('social') || lower.includes('instagram') || lower.includes('threads')) return 'Social';
-  if (lower.includes('search') || lower.includes('kagi') || lower.includes('google') || lower.includes('bing') || lower.includes('duckduckgo')) return 'Search';
-  if (lower.includes('travel') || lower.includes('hotel') || lower.includes('flight') || lower.includes('trip') || lower.includes('booking')) return 'Travel';
-
-  // 3. Fallback: Limit strictly to 1-2 words and at most 12 characters
-  const words = title.split(/\s+/).filter(Boolean);
-  if (words.length > 2) {
-    title = words.slice(0, 2).join(' ');
-  }
+  // 2. Truncate strictly <= 12 characters respecting word boundaries (never cut mid-word)
   if (title.length > 12) {
-    title = title.slice(0, 12).trim();
+    const words = title.split(/\s+/).filter(Boolean);
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length <= 12) {
+        current = candidate;
+      } else {
+        break;
+      }
+    }
+    // If the first word itself is longer than 12 chars, truncate it to 12 chars
+    title = current || (words[0] ? words[0].slice(0, 12).trim() : '');
   }
 
-  if (!title || lower.includes('other') || lower.includes('misc') || lower.includes('uncategorized')) return 'Other';
+  if (!title) return 'Other';
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 /**
- * Merges groups with identical or synonymous normalized titles.
+ * Merges groups with normalized-title equality (case/whitespace/punctuation-insensitive).
  */
 export function mergeDuplicateGroups(groups) {
   if (!groups || groups.length === 0) return [];
 
-  const titleMap = new Map(); // canonicalTitle -> { title, tabIds: Set, rationales: [] }
+  const titleMap = new Map(); // normalizedKey -> { title, tabIds: Set, rationales: [] }
 
   for (const group of groups) {
     const cleanTitle = cleanAndShortenTitle(group.title);
-    const key = cleanTitle.toLowerCase();
+    const key = cleanTitle.toLowerCase().replace(/[^\w]/g, '');
 
     if (!titleMap.has(key)) {
       titleMap.set(key, {
@@ -122,28 +200,14 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     }
   }
 
-  // Handle leftovers / Other
+  // Handle leftovers / Other: keep as dedicated 'Other' group to avoid polluting subject clusters
   if (leftoverTabIds.length > 0) {
-    if (leftoverTabIds.length >= minSize) {
-      validGroups.push({
-        title: 'Other',
-        color: 'grey',
-        rationale: 'Consolidated reference tabs',
-        tabIds: leftoverTabIds
-      });
-    } else if (validGroups.length > 0) {
-      // If remaining tabs count < minSize, append them to the largest group
-      const largest = validGroups.reduce((max, g) => (g.tabIds.length > max.tabIds.length ? g : max), validGroups[0]);
-      largest.tabIds.push(...leftoverTabIds);
-    } else {
-      // If total tabs across all browser is < minSize
-      validGroups.push({
-        title: 'General',
-        color: 'blue',
-        rationale: 'Active tabs',
-        tabIds: leftoverTabIds
-      });
-    }
+    validGroups.push({
+      title: 'Other',
+      color: 'grey',
+      rationale: 'Unassigned or standalone reference tabs',
+      tabIds: leftoverTabIds
+    });
   }
 
   return validGroups;
@@ -397,68 +461,21 @@ export class TabOrganizer {
       (g.tabIds || []).forEach(id => assignedTabIds.add(id));
     });
 
-    const unassignedTabs = rawTabs.filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
+    const unassignedTabs = (rawTabs || []).filter(t => !assignedTabIds.has(t.tabId) && !t.pinned);
 
     if (unassignedTabs.length > 0) {
-      console.log(`[Reconciler] Clustering ${unassignedTabs.length} remaining tabs.`);
+      console.warn(`[Reconciler] Found ${unassignedTabs.length} unassigned tabs not grouped by LLM.`);
 
-      // Group unassigned tabs by domain / category
-      const domainClusters = new Map();
-      for (const tab of unassignedTabs) {
-        let domainKey = 'Other';
-        try {
-          if (tab.url) {
-            const u = new URL(tab.url);
-            domainKey = u.hostname.replace(/^www\./, '');
-          }
-        } catch {
-          domainKey = 'Other';
-        }
-
-        if (domainKey.includes('reddit.com')) {
-          domainKey = 'Reddit';
-        } else if (domainKey.includes('wiki') || domainKey.includes('fandom') || domainKey.includes('gamepedia')) {
-          domainKey = 'Wiki';
-        } else if (domainKey.includes('github') || domainKey.includes('gitlab')) {
-          domainKey = 'Code';
-        } else if (domainKey.includes('youtube') || domainKey.includes('twitch')) {
-          domainKey = 'Video';
-        }
-
-        if (!domainClusters.has(domainKey)) {
-          domainClusters.set(domainKey, []);
-        }
-        domainClusters.get(domainKey).push(tab);
-      }
-
-      const remainderTabs = [];
-
-      for (const [domain, tabs] of domainClusters.entries()) {
-        const cleanTitle = cleanAndShortenTitle(domain);
-        if (tabs.length >= 3) {
-          plan.groups.push({
-            title: cleanTitle,
-            color: 'blue',
-            rationale: `Clustered ${tabs.length} tabs from ${domain}`,
-            tabIds: tabs.map(t => t.tabId)
-          });
-        } else {
-          remainderTabs.push(...tabs);
-        }
-      }
-
-      // Consolidate small remainders into Other
-      if (remainderTabs.length > 0) {
-        plan.groups.push({
-          title: 'Other',
-          color: 'grey',
-          rationale: 'Standalone reference tabs',
-          tabIds: remainderTabs.map(t => t.tabId)
-        });
-      }
+      // Route all unassigned tabs into Other group
+      plan.groups.push({
+        title: 'Other',
+        color: 'grey',
+        rationale: 'Unassigned or standalone reference tabs',
+        tabIds: unassignedTabs.map(t => t.tabId)
+      });
     }
 
-    // Step 1: Merge duplicates and synonyms (e.g. Music+Music+Songsterr -> Music, Code+Coding -> Code)
+    // Step 1: Merge duplicates
     // Step 2: Enforce >2 tabs per group constraint across the entire plan
     plan.groups = consolidateSmallGroups(plan.groups, 3);
 

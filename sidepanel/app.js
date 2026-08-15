@@ -75,6 +75,7 @@ const elements = {
   panelOllama: document.getElementById('settings-panel-ollama'),
   cfgOllamaEndpoint: document.getElementById('cfg-ollama-endpoint'),
   cfgOllamaModel: document.getElementById('cfg-ollama-model'),
+  cfgOllamaNumCtx: document.getElementById('cfg-ollama-num-ctx'),
 
   panelNano: document.getElementById('settings-panel-gemini_nano'),
 
@@ -129,7 +130,8 @@ function updateSettingsUI() {
 
   // Populate Local Inputs
   if (elements.cfgOllamaEndpoint) elements.cfgOllamaEndpoint.value = ollama?.endpoint || 'http://localhost:11434';
-  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'qwen2.5:3b';
+  if (elements.cfgOllamaModel) elements.cfgOllamaModel.value = ollama?.model || 'gemma4:12b';
+  if (elements.cfgOllamaNumCtx) elements.cfgOllamaNumCtx.value = ollama?.num_ctx || 32768;
 
   if (elements.cfgLmStudioEndpoint) elements.cfgLmStudioEndpoint.value = lmStudio?.endpoint || 'http://localhost:1234';
   if (elements.cfgLmStudioModel) elements.cfgLmStudioModel.value = lmStudio?.model || 'local-model';
@@ -327,7 +329,8 @@ function collectSettingsFromModal() {
     },
     ollama: {
       endpoint: elements.cfgOllamaEndpoint?.value.trim() || 'http://localhost:11434',
-      model: elements.cfgOllamaModel?.value.trim() || 'qwen2.5:3b',
+      model: elements.cfgOllamaModel?.value.trim() || 'gemma4:12b',
+      num_ctx: Number(elements.cfgOllamaNumCtx?.value) || 32768,
       temperature: 0.2
     },
     lmStudio: {
@@ -434,6 +437,17 @@ async function startAnalysis() {
   }
 }
 
+// HTML escaping helper to prevent XSS / HTML injection from external page titles
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Render Results & Diff Preview
 function renderResults(plan) {
   elements.resultsContainer.classList.remove('hidden');
@@ -441,6 +455,17 @@ function renderResults(plan) {
 
   // 1. Summary
   elements.resultsSummary.textContent = plan.summary || 'Tabs organized into coherent semantic clusters.';
+
+  // Render Warning Banner if guardrail violations occurred (Feedback Item 2)
+  const existingWarn = elements.resultsContainer.querySelector('.results-warning-banner');
+  if (existingWarn) existingWarn.remove();
+
+  if (plan.warning) {
+    const warnEl = document.createElement('div');
+    warnEl.className = 'results-warning-banner';
+    warnEl.innerHTML = `<span>⚠️ ${escapeHtml(plan.warning)}</span>`;
+    elements.resultsSummary.parentNode.insertBefore(warnEl, elements.resultsSummary.nextSibling);
+  }
 
   // 2. Suggested Actions (Duplicates etc.)
   const actions = plan.suggestedActions || [];
@@ -451,10 +476,12 @@ function renderResults(plan) {
     actions.forEach((act) => {
       const itemEl = document.createElement('div');
       itemEl.className = 'action-item';
+      const safeActionLabel = escapeHtml(act.action === 'close_duplicate' ? 'Duplicate Tab' : 'Suggested Action');
+      const safeReason = escapeHtml(act.reason || act.title || '');
       itemEl.innerHTML = `
         <div>
-          <strong>${act.action === 'close_duplicate' ? 'Duplicate Tab' : 'Suggested Action'}</strong>
-          <p style="color: var(--text-secondary); font-size: 10px;">${act.reason || act.title || ''}</p>
+          <strong>${safeActionLabel}</strong>
+          <p style="color: var(--text-secondary); font-size: 10px;">${safeReason}</p>
         </div>
         <button class="btn-mini-danger" data-tab-id="${act.tabId}">Close</button>
       `;
@@ -490,6 +517,9 @@ function renderGroupsList(groups) {
     // Header
     const header = document.createElement('div');
     header.className = 'group-card-header';
+    if (group.label) {
+      header.title = `Topic: ${group.label}`;
+    }
 
     const titleArea = document.createElement('div');
     titleArea.className = 'group-card-title-area';
@@ -553,10 +583,13 @@ function renderGroupsList(groups) {
       const defaultIcon = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
       const iconUrl = tabData.favIconUrl && !tabData.favIconUrl.startsWith('chrome://') ? tabData.favIconUrl : defaultIcon;
 
+      const safeTitle = escapeHtml(tabData.title);
+      const safeDomain = escapeHtml(domain);
+
       row.innerHTML = `
-        <img class="tab-favicon" src="${iconUrl}" onerror="this.src='${defaultIcon}'" alt="">
-        <span class="tab-title-text" title="${tabData.title}">${tabData.title}</span>
-        ${domain ? `<span class="tab-domain-tag">${domain}</span>` : ''}
+        <img class="tab-favicon" src="${escapeHtml(iconUrl)}" onerror="this.src='${defaultIcon}'" alt="">
+        <span class="tab-title-text" title="${safeTitle}">${safeTitle}</span>
+        ${safeDomain ? `<span class="tab-domain-tag">${safeDomain}</span>` : ''}
       `;
 
       tabsListEl.appendChild(row);

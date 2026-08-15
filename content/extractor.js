@@ -90,19 +90,7 @@
       const parts = hostname.split('.');
       const wikiName = parts[0] === 'www' ? parts[1] : parts[0];
       platformContext = {
-        platform: 'Gaming / Wiki',
-        wiki: wikiName,
-        category: 'Gaming'
-      };
-    } else if (hostname.includes('steampowered.com') || hostname.includes('steamcommunity.com')) {
-      platformContext = {
-        platform: 'Steam',
-        category: 'Gaming'
-      };
-    } else if (hostname.includes('twitch.tv')) {
-      platformContext = {
-        platform: 'Twitch',
-        category: 'Live Stream'
+        wiki: wikiName
       };
     }
 

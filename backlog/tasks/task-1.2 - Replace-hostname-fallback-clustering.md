@@ -1,10 +1,11 @@
 ---
 id: TASK-1.2
 title: Replace hostname fallback clustering
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@agent'
 created_date: '2026-08-15 10:47'
-updated_date: '2026-08-15 11:41'
+updated_date: '2026-08-15 13:32'
 labels:
   - grouping
 milestone: m-0
@@ -25,8 +26,26 @@ reconcilePlanWithRawTabs() in background/tab-organizer.js (lines 405-448) cluste
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The hostname-to-label mapping (reddit/wiki/fandom/gamepedia/github/gitlab/youtube/twitch) is fully removed from reconcilePlanWithRawTabs()
-- [ ] #2 Unassigned tabs are never used to mint a new domain-named group
-- [ ] #3 All unassigned tabs are routed into a single 'Other' group via the existing consolidateSmallGroups() leftover path
-- [ ] #4 The unassigned tab count is logged (console.warn) so a high count is a visible signal rather than silently papered over
+- [x] #1 The hostname-to-label mapping (reddit/wiki/fandom/gamepedia/github/gitlab/youtube/twitch) is fully removed from reconcilePlanWithRawTabs()
+- [x] #2 Unassigned tabs are never used to mint a new domain-named group
+- [x] #3 All unassigned tabs are routed into a single 'Other' group via the existing consolidateSmallGroups() leftover path
+- [x] #4 The unassigned tab count is logged (console.warn) so a high count is a visible signal rather than silently papered over
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Remove domain clustering and hostname-to-label mappings from reconcilePlanWithRawTabs
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Removed domain fallback mappings from reconcilePlanWithRawTabs. Added warning log when tabs are unassigned, and routed unassigned tabs directly into the Other group. Verified with node test runner across all 4 ACs.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Removed domain/hostname fallback clustering from reconcilePlanWithRawTabs and routed all unassigned tabs directly into Other, with visible console.warn logging.
+<!-- SECTION:FINAL_SUMMARY:END -->

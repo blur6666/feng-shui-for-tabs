@@ -3,7 +3,7 @@
  * Supports Google Gemini, Anthropic Claude, OpenAI, OpenRouter, Groq, Ollama, Chrome Gemini Nano, and LM Studio.
  */
 
-import { PROVIDERS, PROVIDER_METADATA, SYSTEM_PROMPT } from '../shared/constants.js';
+import { PROVIDERS, PROVIDER_METADATA, SYSTEM_PROMPT, estimateTokens } from '../shared/constants.js';
 
 // Helper to extract clean JSON from LLM output (handles code fences, preamble, thought tags)
 export function extractJsonFromResponse(rawText) {
@@ -170,7 +170,7 @@ export class LLMAdapter {
   /**
    * Generates tab grouping plan using the configured LLM provider.
    */
-  static async generateGroupingPlan(prompt, settings, onTokenChunk = null) {
+  static async generateGroupingPlan(prompt, settings, onTokenChunk = null, systemPrompt = SYSTEM_PROMPT) {
     const provider = settings.provider || PROVIDERS.OLLAMA;
 
     switch (provider) {
@@ -180,6 +180,7 @@ export class LLMAdapter {
           model: settings.gemini?.model || 'gemini-2.0-flash',
           apiKey: settings.gemini?.apiKey,
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
@@ -188,6 +189,7 @@ export class LLMAdapter {
           model: settings.claude?.model || 'claude-3-5-haiku-20241022',
           apiKey: settings.claude?.apiKey,
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
@@ -197,6 +199,7 @@ export class LLMAdapter {
           model: settings.openai?.model || 'gpt-4o-mini',
           apiKey: settings.openai?.apiKey,
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
@@ -210,6 +213,7 @@ export class LLMAdapter {
             'X-Title': 'Tab Intelligence'
           },
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
@@ -219,14 +223,15 @@ export class LLMAdapter {
           model: settings.groq?.model || 'llama-3.3-70b-versatile',
           apiKey: settings.groq?.apiKey,
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
       case PROVIDERS.OLLAMA:
-        return this._callOllama(prompt, settings, onTokenChunk);
+        return this._callOllama(prompt, settings, onTokenChunk, systemPrompt);
 
       case PROVIDERS.GEMINI_NANO:
-        return this._callGeminiNano(prompt, settings, onTokenChunk);
+        return this._callGeminiNano(prompt, settings, onTokenChunk, systemPrompt);
 
       case PROVIDERS.LM_STUDIO:
         return this._callOpenAICompatible({
@@ -235,6 +240,7 @@ export class LLMAdapter {
           apiKey: settings.lmStudio?.apiKey,
           temperature: settings.lmStudio?.temperature ?? 0.2,
           prompt,
+          systemPrompt,
           onTokenChunk
         });
 
@@ -246,7 +252,7 @@ export class LLMAdapter {
   /**
    * Anthropic Claude API streaming implementation
    */
-  static async _callAnthropic({ model, apiKey, prompt, onTokenChunk }) {
+  static async _callAnthropic({ model, apiKey, prompt, systemPrompt, onTokenChunk }) {
     if (!apiKey || !apiKey.trim()) {
       throw new Error('Anthropic Claude API Key is required. Please set it in Settings.');
     }
@@ -254,7 +260,7 @@ export class LLMAdapter {
     const payload = {
       model,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt || SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
       stream: true
     };
@@ -309,11 +315,11 @@ export class LLMAdapter {
   /**
    * Universal OpenAI-compatible API streaming implementation
    */
-  static async _callOpenAICompatible({ endpoint, model, apiKey, headers = {}, temperature = 0.2, prompt, onTokenChunk }) {
+  static async _callOpenAICompatible({ endpoint, model, apiKey, headers = {}, temperature = 0.2, prompt, systemPrompt, onTokenChunk }) {
     const payload = {
       model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt || SYSTEM_PROMPT },
         { role: 'user', content: prompt }
       ],
       temperature,
@@ -380,20 +386,29 @@ export class LLMAdapter {
   /**
    * Ollama implementation
    */
-  static async _callOllama(prompt, settings, onTokenChunk) {
+  static async _callOllama(prompt, settings, onTokenChunk, systemPrompt = SYSTEM_PROMPT) {
     const endpoint = settings.ollama?.endpoint || 'http://localhost:11434';
-    const model = settings.ollama?.model || 'qwen2.5:3b';
+    const model = settings.ollama?.model || 'gemma4:12b';
     const temperature = settings.ollama?.temperature ?? 0.2;
+    const num_ctx = Number(settings.ollama?.num_ctx) || 32768;
+    const activeSystemPrompt = systemPrompt || SYSTEM_PROMPT;
+
+    // Token budgeting check before dispatch
+    const totalPromptText = (prompt || '') + '\n' + (activeSystemPrompt || '');
+    const estimatedTokens = estimateTokens(totalPromptText);
+    if (estimatedTokens > num_ctx) {
+      throw new Error(`Context budget exceeded: Estimated ${estimatedTokens} tokens exceeds configured Ollama context window (num_ctx: ${num_ctx}). Please increase num_ctx in Settings or reduce batch size.`);
+    }
 
     const payload = {
       model,
       prompt,
-      system: SYSTEM_PROMPT,
+      system: activeSystemPrompt,
       format: 'json',
       stream: true,
       options: {
         temperature,
-        num_ctx: 16384
+        num_ctx
       }
     };
 
@@ -440,14 +455,14 @@ export class LLMAdapter {
   /**
    * Chrome Built-in Prompt API (Gemini Nano) implementation
    */
-  static async _callGeminiNano(prompt, settings, onTokenChunk) {
+  static async _callGeminiNano(prompt, settings, onTokenChunk, systemPrompt = null) {
     const aiObj = globalThis.ai || (typeof LanguageModel !== 'undefined' ? { languageModel: LanguageModel } : null);
     if (!aiObj || !aiObj.languageModel) {
       throw new Error('Chrome Built-in Prompt API is not supported in this Chrome browser instance.');
     }
 
     const session = await aiObj.languageModel.create({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: systemPrompt || SYSTEM_PROMPT,
       temperature: settings.geminiNano?.temperature ?? 0.2,
       topK: settings.geminiNano?.topK ?? 3
     });
