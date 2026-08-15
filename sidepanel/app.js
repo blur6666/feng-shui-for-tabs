@@ -478,7 +478,6 @@ function categorizeActions(actions) {
 
   return Object.entries(buckets).filter(([, b]) => b.items.length > 0);
 }
-}
 
 // Render Results & Diff Preview
 function renderResults(plan) {
@@ -557,12 +556,15 @@ function renderResults(plan) {
         itemEl.className = 'action-item';
 
         const tabData = appState.rawTabsMap.get(act.tabId) || { id: act.tabId, title: act.reason || `Tab #${act.tabId}` };
+        const safeTabTitle = escapeHtml(tabData.title || `Tab #${act.tabId}`);
+        const safeReason = escapeHtml(act.reason || '');
+        const safeTabId = escapeHtml(act.tabId);
         itemEl.innerHTML = `
           <div class="action-item-info">
-            <span class="action-item-title" title="${tabData.title}">${tabData.title || `Tab #${act.tabId}`}</span>
-            <span class="action-item-reason">${act.reason || ''}</span>
+            <span class="action-item-title" title="${safeTabTitle}">${safeTabTitle}</span>
+            <span class="action-item-reason">${safeReason}</span>
           </div>
-          <button class="btn-mini-danger" title="Close this tab" data-tab-id="${act.tabId}">✕</button>
+          <button class="btn-mini-danger" title="Close this tab" data-tab-id="${safeTabId}">✕</button>
         `;
 
         itemEl.querySelector('.btn-mini-danger').addEventListener('click', async (e) => {
