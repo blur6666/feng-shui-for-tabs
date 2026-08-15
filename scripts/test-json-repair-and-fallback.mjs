@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { extractJsonFromResponse, repairTruncatedJson } from './background/llm-adapter.js';
-import { planPass2Budget, resolveAnalysisProfile } from './background/analysis-profile.js';
+import { extractJsonFromResponse, repairTruncatedJson } from '../background/llm-adapter.js';
+import { planPass2Budget, resolveAnalysisProfile } from '../background/analysis-profile.js';
 
 // Test 1: Truncated mid-string in groups array
 const truncatedStringJson = `

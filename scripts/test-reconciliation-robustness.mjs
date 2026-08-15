@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TabOrganizer, consolidateSmallGroups, normalizePlanGroups } from './background/tab-organizer.js';
+import { TabOrganizer, consolidateSmallGroups, normalizePlanGroups } from '../background/tab-organizer.js';
 
 // Case 1: String IDs from LLM
 const stringIdPlan = {

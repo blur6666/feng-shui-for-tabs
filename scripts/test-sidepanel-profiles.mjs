@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Lightweight DOM-free sidepanel regression check.
- * Run with: node test-sidepanel-profiles.mjs
+ * Run with: node scripts/test-sidepanel-profiles.mjs
  */
 
 import assert from 'node:assert/strict';
@@ -101,7 +101,7 @@ globalThis.chrome = {
   }
 };
 
-await import('./sidepanel/app.js');
+await import('../sidepanel/app.js');
 await documentListeners.DOMContentLoaded();
 
 // No profile selector should exist anywhere in the DOM elements cache.
