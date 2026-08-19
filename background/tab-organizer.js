@@ -172,7 +172,7 @@ export function cleanAndShortenTitle(rawTitle) {
 export function mergeDuplicateGroups(groups) {
   if (!groups || groups.length === 0) return [];
 
-  const titleMap = new Map(); // normalizedKey -> { title, tabIds: Set, rationales: [] }
+  const titleMap = new Map(); // normalizedKey -> { title, label, tabIds: Set, rationales: [] }
 
   for (const group of groups) {
     const cleanTitle = cleanAndShortenTitle(group.title);
@@ -181,6 +181,9 @@ export function mergeDuplicateGroups(groups) {
     if (!titleMap.has(key)) {
       titleMap.set(key, {
         title: cleanTitle,
+        // The full descriptive label carries the richest topic tokens, so it must survive
+        // the merge for downstream semantic scoring in consolidateSmallGroups.
+        label: group.label || group.title || cleanTitle,
         tabIds: new Set(group.tabIds || []),
         rationales: [group.rationale || '']
       });
@@ -188,6 +191,9 @@ export function mergeDuplicateGroups(groups) {
       const existing = titleMap.get(key);
       (group.tabIds || []).forEach(id => existing.tabIds.add(id));
       if (group.rationale) existing.rationales.push(group.rationale);
+      if (!existing.label && (group.label || group.title)) {
+        existing.label = group.label || group.title;
+      }
     }
   }
 
@@ -195,6 +201,7 @@ export function mergeDuplicateGroups(groups) {
   for (const [, item] of titleMap.entries()) {
     merged.push({
       title: item.title,
+      label: item.label || item.title,
       color: 'blue',
       rationale: item.rationales.filter(Boolean).join('; '),
       tabIds: Array.from(item.tabIds)
@@ -256,8 +263,10 @@ export function normalizePlanGroups(plan, validTabIds = null, idMap = null) {
             id = Number(nestedId);
           }
         }
-        if (id !== null && idMap && idMap.has(id)) {
-          id = idMap.get(id);
+        // Under dense indexing the prompt only ever exposes 1..N, so an id the map does
+        // not know is a hallucination and must never be matched against real tab IDs.
+        if (id !== null && idMap) {
+          id = idMap.has(id) ? idMap.get(id) : null;
         }
         if (id !== null && (!validTabIds || validTabIds.has(id))) {
           if (!claimedTabIds.has(id)) {
@@ -414,10 +423,13 @@ export function buildSemanticTopicClusters(labeledTabs, rawTabs = []) {
   const unassignedAfterMatching = [];
 
   for (const t of trueSingletons) {
+    const rawTab = rawTabMap.get(t.id);
     const tabTokens = new Set([
       ...extractKeywords(t.subject),
       ...extractKeywords(t.title),
-      ...extractKeywords(t.url)
+      ...extractKeywords(t.url),
+      ...extractKeywords(rawTab?.title),
+      ...extractKeywords(rawTab?.url)
     ]);
 
     let bestGroup = null;

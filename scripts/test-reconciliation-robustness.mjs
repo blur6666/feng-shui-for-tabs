@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TabOrganizer, consolidateSmallGroups, granularityToMinSize, normalizePlanGroups, buildSemanticTopicClusters } from '../background/tab-organizer.js';
+import { TabOrganizer, consolidateSmallGroups, granularityToMinSize, mergeDuplicateGroups, normalizePlanGroups, buildSemanticTopicClusters } from '../background/tab-organizer.js';
 
 // Case 1: String IDs from LLM
 const stringIdPlan = {
@@ -234,6 +234,64 @@ const pairsOther = consolidatedPairs.find(g => g.title === 'Other');
 assert.ok(
   !pairsOther || pairsOther.tabIds.length <= 112 * 0.2,
   'Other must stay a small share of the plan when minSize cannot be enforced cheaply'
+);
+
+// Case 16: with a dense idMap, indices outside the map must never be accepted as real
+// tab IDs even when they collide with a live Chrome tab ID (invariant 5).
+const collidingIdMap = new Map([[1, 5], [2, 6], [3, 7], [4, 8]]);
+const collidingPlan = {
+  groups: [
+    { title: 'Beta', tabIds: [3, 4, 5] },
+    { title: 'Alpha', tabIds: [1, 2] }
+  ]
+};
+const collisionSafe = normalizePlanGroups(collidingPlan, new Set([5, 6, 7, 8]), collidingIdMap);
+assert.deepEqual(
+  collisionSafe.groups.find(g => g.title === 'Beta').tabIds,
+  [7, 8],
+  'Index 5 is outside the dense map and must be dropped, not read as real tab ID 5'
+);
+assert.deepEqual(
+  collisionSafe.groups.find(g => g.title === 'Alpha').tabIds,
+  [5, 6],
+  'Alpha must keep both of its mapped tabs rather than losing one to a collision'
+);
+
+// Case 17: mergeDuplicateGroups preserves `label`, so consolidateSmallGroups can score it
+const labelled = mergeDuplicateGroups([{ title: 'Codex', label: 'OpenAI Codex CLI', tabIds: [1, 2] }]);
+assert.equal(labelled[0].label, 'OpenAI Codex CLI', 'Merge must not drop the descriptive label');
+
+const labelScored = consolidateSmallGroups([
+  { title: 'Codex', label: 'Codex', rationale: '', tabIds: [1, 2, 3] },
+  { title: 'Notes', label: 'OpenAI Codex CLI notes', rationale: '', tabIds: [4, 5] }
+], granularityToMinSize('balanced'));
+const codexGroup = labelScored.find(g => g.title === 'Codex');
+assert.ok(codexGroup, 'Codex group must survive');
+assert.deepEqual(
+  codexGroup.tabIds.sort((a, b) => a - b),
+  [1, 2, 3, 4, 5],
+  'A sub-minSize group matching only on its label must merge instead of falling into Other'
+);
+assert.ok(!labelScored.some(g => g.title === 'Other'), 'Nothing should be left over once the label matches');
+
+// Case 18: buildSemanticTopicClusters matches isolated tabs on raw-tab signals in step 3,
+// since labeled records carry no full url of their own.
+const clusterLabeled = [
+  { id: 201, subject: 'Getting started', title: 'Getting started', entity: 'Kubernetes', url: '' },
+  { id: 202, subject: 'Reference docs', title: 'Docs', entity: 'Kubernetes', url: '' },
+  { id: 203, subject: 'Deep dive', title: 'Deep dive', entity: '', url: '' }
+];
+const clusterRaw = [
+  { tabId: 201, title: 'Getting started', url: 'https://kubernetes.io/start' },
+  { tabId: 202, title: 'Docs', url: 'https://kubernetes.io/docs' },
+  { tabId: 203, title: 'Deep dive', url: 'https://kubernetes.io/blog/deep-dive' }
+];
+const rawSignalClusters = buildSemanticTopicClusters(clusterLabeled, clusterRaw);
+const k8sGroup = rawSignalClusters.find(g => g.title.toLowerCase().includes('kubernetes'));
+assert.ok(k8sGroup, 'Kubernetes entity group must form');
+assert.ok(
+  k8sGroup.tabIds.includes(203),
+  'Isolated tab whose only shared signal is its raw url must join the matching group, not stand alone'
 );
 
 console.log('Reconciliation robustness tests passed');

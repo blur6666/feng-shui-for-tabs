@@ -227,7 +227,9 @@ export async function labelTabsInBatches(distilledTabs, settings, onProgress = n
           id: tab.id,
           title: tab.title || '',
           domain: tab.domain || '',
-          url: tab.url || '',
+          // Distilled tabs carry domain + path rather than a full url, so rebuild the
+          // slug signal here; downstream clusterers key off `url` for topic tokens.
+          url: tab.url || [tab.domain, tab.path].filter(Boolean).join(''),
           subject: resolved.subject || tab.title || 'Topic',
           entity: resolved.entity || fallbackEntity,
           intent: resolved.intent || 'reference'
