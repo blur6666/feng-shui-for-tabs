@@ -75,7 +75,11 @@ export function distillTabsForPrompt(tabs, options = {}) {
       snippet = `${snippet.slice(0, effectiveSnippetLength)}...`;
     }
 
-    const entityParts = [ext.schemaBrand, ext.schemaArtist, ext.schemaCategory, ext.schemaAbout, ext.schemaName].filter(Boolean);
+    // Guard the prompt against non-string schema values reaching it as "[object Object]"
+    // even if an extraction predates the extractor's own normalization.
+    const entityParts = [ext.schemaBrand, ext.schemaArtist, ext.schemaCategory, ext.schemaAbout, ext.schemaName]
+      .map(part => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean);
     const entityHint = entityParts.length > 0 ? entityParts.join(' · ') : undefined;
 
     let subjectSignals = ext.platformContext || undefined;

@@ -36,7 +36,9 @@ export function extractUrlPlatformFallback(rawUrl) {
       if (q) {
         return {
           platform: 'Search',
-          query: decodeURIComponent(q.replace(/\+/g, ' ')).slice(0, 100)
+          // searchParams.get already percent-decodes and turns '+' into a space; decoding
+          // again mangles literal '+' and throws URIError on a literal '%'.
+          query: q.slice(0, 100)
         };
       }
     }

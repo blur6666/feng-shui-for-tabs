@@ -404,6 +404,35 @@ async function testRichBrowserExtractionAndGlobalDedupe() {
   assert.equal(githubFallback?.platform, 'GitHub');
   assert.equal(githubFallback?.repo, 'lidge-jun/opencodex');
 
+  // searchParams.get already decodes, so encoded queries must survive verbatim rather
+  // than being decoded a second time (which ate literal '+' and threw on literal '%').
+  const plusFallback = extractUrlPlatformFallback('https://www.google.com/search?q=C%2B%2B+tutorial');
+  assert.equal(plusFallback?.query, 'C++ tutorial', 'Literal + in a query must not be swallowed');
+
+  const percentFallback = extractUrlPlatformFallback('https://duckduckgo.com/?q=50%25+off+laptops');
+  assert.equal(
+    percentFallback?.query,
+    '50% off laptops',
+    'A literal % must not throw URIError and drop the whole platform context'
+  );
+
+  // A JSON-LD object value must never reach the prompt as "[object Object]" and from there
+  // become a tab-group title.
+  const objectSchemaDistilled = distillTabsForPrompt([{
+    tabId: 99,
+    title: 'Air Fryer XL',
+    url: 'https://shop.example.com/air-fryer',
+    extractedData: {
+      schemaCategory: { '@type': 'Thing', name: 'Kitchen' },
+      schemaName: 'Air Fryer XL'
+    }
+  }]);
+  assert.ok(
+    !JSON.stringify(objectSchemaDistilled).includes('[object Object]'),
+    'Non-string schema values must never be stringified into the prompt'
+  );
+  assert.equal(objectSchemaDistilled[0].entityHint, 'Air Fryer XL');
+
   // Test 2: Compact prompt encoding contains platform signals
   const rawTabs = [
     {

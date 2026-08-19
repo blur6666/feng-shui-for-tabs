@@ -23,6 +23,22 @@
     const canonical = document.querySelector('link[rel="canonical"]')?.href || null;
 
     // 2. Schema.org JSON-LD Extraction (Rich Triples)
+    // JSON-LD values are strings, nested objects, or arrays of either. Anything that is
+    // not reduced to plain text here can reach a Chrome tab-group title as "[object Object]".
+    const readSchemaText = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string') return value.trim() || null;
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          const text = readSchemaText(entry);
+          if (text) return text;
+        }
+        return null;
+      }
+      if (typeof value === 'object') return typeof value.name === 'string' ? value.name.trim() || null : null;
+      return null;
+    };
+
     let schemaType = null;
     let schemaName = null;
     let schemaBrand = null;
@@ -39,10 +55,10 @@
           if (item && item['@type']) {
             schemaType = Array.isArray(item['@type']) ? item['@type'].join(', ') : item['@type'];
             schemaName = item.name || item.headline || null;
-            schemaBrand = item.brand?.name || (typeof item.brand === 'string' ? item.brand : null);
-            schemaArtist = item.byArtist?.name || (typeof item.byArtist === 'string' ? item.byArtist : null);
-            schemaCategory = item.category || item.applicationCategory || null;
-            schemaAbout = item.about?.name || (typeof item.about === 'string' ? item.about : null);
+            schemaBrand = readSchemaText(item.brand);
+            schemaArtist = readSchemaText(item.byArtist);
+            schemaCategory = readSchemaText(item.category) || readSchemaText(item.applicationCategory);
+            schemaAbout = readSchemaText(item.about);
             break;
           }
         }
