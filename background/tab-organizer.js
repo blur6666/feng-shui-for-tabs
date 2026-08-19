@@ -461,9 +461,16 @@ export function buildSemanticTopicClusters(labeledTabs, rawTabs = []) {
   return formedGroups;
 }
 
+// Ceiling on how much of a plan may end up in 'Other' while enforcing minSize.
+const OTHER_SHARE_CEILING = 0.2;
+const OTHER_MIN_ALLOWANCE = 3;
+
 /**
  * Ensures every group has at least minSize tabs (default 3, minimum 2).
- * Semantically merges singletons into larger matching groups and consolidates true leftovers.
+ * Groups below minSize are first offered to a semantically matching valid group.
+ * Whatever stays unmatched is dissolved into 'Other' only while 'Other' remains a
+ * small share of the plan; otherwise the sub-minSize topic groups are preserved,
+ * so enforcing the granularity minimum can never produce a dominant 'Other' dump.
  */
 export function consolidateSmallGroups(groups, minSize = 3) {
   if (!groups || groups.length === 0) return [];
@@ -473,17 +480,21 @@ export function consolidateSmallGroups(groups, minSize = 3) {
   const smallGroups = [];
   const leftoverTabIds = [];
 
+  const totalTabs = merged.reduce((sum, group) => sum + (group.tabIds || []).length, 0);
+  const otherBudget = Math.max(OTHER_MIN_ALLOWANCE, Math.ceil(totalTabs * OTHER_SHARE_CEILING));
+
   for (const group of merged) {
     if (group.title === 'Other') {
       leftoverTabIds.push(...group.tabIds);
-    } else if (group.tabIds.length >= 2) {
+    } else if (group.tabIds.length >= minSize) {
       validGroups.push(group);
     } else {
       smallGroups.push(group);
     }
   }
 
-  // Semantic merging of 1-tab singletons into matching valid groups
+  // Semantic merging of sub-minSize groups into matching valid groups
+  const unmatched = [];
   for (const small of smallGroups) {
     const smallTokens = new Set([
       ...extractKeywords(small.title),
@@ -512,11 +523,31 @@ export function consolidateSmallGroups(groups, minSize = 3) {
     if (bestGroup && bestScore >= 2) {
       bestGroup.tabIds.push(...small.tabIds);
     } else {
-      leftoverTabIds.push(...small.tabIds);
+      unmatched.push(small);
     }
   }
 
-  // Handle true leftovers: only unmatchable singletons go to 'Other'
+  // Singletons can never stand alone as a group, so they always fall through to 'Other'.
+  // Coherent 2+ tab groups below minSize are dissolved only if 'Other' stays within budget.
+  let dissolvableTabCount = 0;
+  let singletonTabCount = 0;
+  for (const group of unmatched) {
+    if (group.tabIds.length >= 2) dissolvableTabCount += group.tabIds.length;
+    else singletonTabCount += group.tabIds.length;
+  }
+  const dissolveBelowMinSize =
+    dissolvableTabCount > 0 &&
+    leftoverTabIds.length + singletonTabCount + dissolvableTabCount <= otherBudget;
+
+  for (const group of unmatched) {
+    if (group.tabIds.length < 2 || dissolveBelowMinSize) {
+      leftoverTabIds.push(...group.tabIds);
+    } else {
+      validGroups.push(group);
+    }
+  }
+
+  // Handle true leftovers: only unmatchable singletons and dissolved stragglers go to 'Other'
   if (leftoverTabIds.length > 0) {
     validGroups.push({
       title: 'Other',

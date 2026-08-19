@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TabOrganizer, consolidateSmallGroups, normalizePlanGroups, buildSemanticTopicClusters } from '../background/tab-organizer.js';
+import { TabOrganizer, consolidateSmallGroups, granularityToMinSize, normalizePlanGroups, buildSemanticTopicClusters } from '../background/tab-organizer.js';
 
 // Case 1: String IDs from LLM
 const stringIdPlan = {
@@ -185,5 +185,55 @@ const denseIdMap = new Map([
 const normalizedDense = normalizePlanGroups(densePlan, null, denseIdMap);
 assert.deepEqual(normalizedDense.groups[0].tabIds, [375317824, 375317825]);
 assert.deepEqual(normalizedDense.groups[1].tabIds, [375317826, 375317827]);
+
+// Case 13: granularityToMinSize maps each granularity to its documented minimum
+assert.equal(granularityToMinSize('broad'), 2);
+assert.equal(granularityToMinSize('balanced'), 3);
+assert.equal(granularityToMinSize('detailed'), 2);
+assert.equal(granularityToMinSize(undefined), 3, 'Missing granularity must default to the Balanced 3-tab minimum');
+
+// Case 14: consolidateSmallGroups honors minSize (TASK-10 / TASK-14)
+// Balanced dissolves an unmatchable 2-tab group into Other; Broad/Detailed preserve it.
+const minSizeInput = () => [
+  { title: 'Alpha', label: 'Alpha', rationale: '', tabIds: [1, 2] },
+  { title: 'Beta', label: 'Beta', rationale: '', tabIds: [3, 4, 5] },
+  { title: 'Gamma', label: 'Gamma', rationale: '', tabIds: [6] }
+];
+
+const balanced = consolidateSmallGroups(minSizeInput(), granularityToMinSize('balanced'));
+assert.ok(
+  !balanced.some(g => g.title === 'Alpha'),
+  'Balanced (minSize 3) must not leave a 2-tab group standing when Other stays within budget'
+);
+const balancedOther = balanced.find(g => g.title === 'Other');
+assert.ok(balancedOther, 'Balanced run must produce an Other group for the dissolved tabs');
+assert.deepEqual(balancedOther.tabIds.sort((a, b) => a - b), [1, 2, 6]);
+assert.ok(balanced.some(g => g.title === 'Beta'), 'Groups at or above minSize survive untouched');
+
+const broad = consolidateSmallGroups(minSizeInput(), granularityToMinSize('broad'));
+assert.ok(
+  broad.some(g => g.title === 'Alpha'),
+  'Broad (minSize 2) must preserve 2-tab groups exactly as previewed'
+);
+assert.deepEqual(broad.find(g => g.title === 'Other').tabIds, [6]);
+
+// Case 15: minSize enforcement must never build a dominant 'Other' dump (TASK-21 guard).
+// 56 unmatchable pairs under Balanced exceed the Other budget, so the pairs are preserved.
+const manyPairs = Array.from({ length: 56 }, (_, i) => ({
+  title: `Topic${i + 1}`,
+  label: `Topic${i + 1}`,
+  rationale: '',
+  tabIds: [i * 2 + 1, i * 2 + 2]
+}));
+const consolidatedPairs = consolidateSmallGroups(manyPairs, granularityToMinSize('balanced'));
+assert.ok(
+  consolidatedPairs.length > 1,
+  `Balanced must not collapse 56 pairs into a single Other group, got ${consolidatedPairs.length}`
+);
+const pairsOther = consolidatedPairs.find(g => g.title === 'Other');
+assert.ok(
+  !pairsOther || pairsOther.tabIds.length <= 112 * 0.2,
+  'Other must stay a small share of the plan when minSize cannot be enforced cheaply'
+);
 
 console.log('Reconciliation robustness tests passed');
