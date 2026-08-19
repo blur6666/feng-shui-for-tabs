@@ -10,6 +10,8 @@ let appState = {
   settings: DEFAULT_SETTINGS,
   isAnalyzing: false,
   plan: null,
+  // True while a session snapshot from an applied grouping is still restorable.
+  canUndo: false,
   rawTabsMap: new Map(),
   totalTabs: 0,
   windowsCount: 0,
@@ -696,7 +698,10 @@ function renderResults(plan) {
   elements.resultsContainer.classList.remove('hidden');
   elements.footerActions.classList.remove('hidden');
   elements.btnCancelPlan?.classList.remove('hidden');
-  elements.btnUndo?.classList.add('hidden');
+  elements.btnApply?.classList.remove('hidden');
+  // Undo belongs to the applied snapshot, not to this render: a later analysis must not
+  // strand a grouping that is still restorable.
+  elements.btnUndo?.classList.toggle('hidden', !appState.canUndo);
 
   // 1. Summary
   elements.resultsSummary.textContent = plan.summary || 'Tabs organized into coherent semantic clusters.';
@@ -985,9 +990,19 @@ function renderGroupsList(groups) {
 function cancelProposedPlan() {
   appState.plan = null;
   elements.resultsContainer.classList.add('hidden');
-  elements.footerActions.classList.add('hidden');
   elements.groupsList.innerHTML = '';
   elements.actionsList.innerHTML = '';
+
+  // Dismissing an unapplied preview must not hide the only route back to a previously
+  // applied grouping, so keep the footer alive for Undo alone when a snapshot exists.
+  if (appState.canUndo) {
+    elements.footerActions.classList.remove('hidden');
+    elements.btnCancelPlan?.classList.add('hidden');
+    elements.btnApply?.classList.add('hidden');
+    elements.btnUndo?.classList.remove('hidden');
+  } else {
+    elements.footerActions.classList.add('hidden');
+  }
 }
 
 // Apply Tab Groups to Chrome
@@ -1012,6 +1027,7 @@ async function applyTabGroups() {
 
     if (response && response.success) {
       elements.btnApply.textContent = '✓ Groups Applied!';
+      appState.canUndo = true;
       elements.btnCancelPlan?.classList.add('hidden');
       elements.btnUndo?.classList.remove('hidden');
       elements.btnUndo.disabled = false;
@@ -1040,6 +1056,7 @@ async function undoTabGroups() {
 
     if (response && response.success) {
       alert('✓ Previous tab organization restored.');
+      appState.canUndo = false;
       elements.btnUndo?.classList.add('hidden');
       elements.footerActions.classList.add('hidden');
       elements.resultsContainer.classList.add('hidden');
