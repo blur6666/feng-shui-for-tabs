@@ -9,7 +9,7 @@ import { distillTabsForPrompt, constructClusteringPrompt } from './content-disti
 import { labelTabsInBatches } from './tab-labeler.js';
 import { LLMAdapter } from './llm-adapter.js';
 import { planPass2Budget, resolveAnalysisProfile } from './analysis-profile.js';
-import { TabOrganizer, validateGroupingPlan } from './tab-organizer.js';
+import { TabOrganizer, validateGroupingPlan, buildSemanticTopicClusters, normalizePlanGroups } from './tab-organizer.js';
 
 // Helper to strip Origin header on requests to local LLMs (bypasses Ollama 403 Forbidden check)
 async function setupDNRRules() {
@@ -336,11 +336,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // Step 4: Pass 2 - Synthesize & Cluster Clean Labeled Tabs
             let plan;
             if (labeledTabs.length > 0) {
+              const idMap = new Map();
               const clusterPrompt = constructClusteringPrompt(
                 labeledTabs,
                 payload?.customInstructions || '',
                 payload?.granularity || 'balanced',
-                profile
+                profile,
+                idMap
               );
               const pass2Budget = planPass2Budget(clusterPrompt, mergedSettings, profile, SYSTEM_PROMPT, labeledTabs.length);
               if (!pass2Budget.fits) {
@@ -368,26 +370,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 onTokenChunk: tokenChunk => emitProgress({ stage: 'streaming', chunk: tokenChunk, profile: profile.id })
               };
 
+              const validTabIds = new Set(labeledTabs.map(t => t.id));
+
               try {
                 const groupingResult = await LLMAdapter.generateGroupingPlan(clusterPrompt, mergedSettings, pass2Options);
-                plan = groupingResult.value;
+                plan = normalizePlanGroups(groupingResult.value, validTabIds, idMap);
               } catch (groupingError) {
                 if (runController.signal.aborted) throw groupingError;
                 console.warn('[ServiceWorker] Pass 2 LLM grouping failed, building semantic fallback groups:', groupingError.message);
-                // Build a fallback plan directly from the Pass 1 labeled subjects and entities
-                const fallbackGroupsMap = new Map();
-                for (const t of labeledTabs) {
-                  const key = (t.entity || t.subject || 'Reference').trim();
-                  if (!fallbackGroupsMap.has(key)) fallbackGroupsMap.set(key, []);
-                  fallbackGroupsMap.get(key).push(t.id);
-                }
-                const fallbackGroups = Array.from(fallbackGroupsMap.entries()).map(([title, ids]) => ({
-                  title,
-                  label: title,
-                  color: 'blue',
-                  rationale: `Grouped by semantic topic (${title})`,
-                  tabIds: ids
-                }));
+                const fallbackGroups = buildSemanticTopicClusters(labeledTabs, tabData.tabs);
                 plan = {
                   summary: 'Tabs organized from semantic topic analysis.',
                   groups: fallbackGroups,
@@ -413,7 +404,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                       stream: false,
                       onMetrics: metrics => onMetrics({ ...metrics, retryReason: 'validation' })
                     });
-                    const retryPlan = retryResult.value;
+                    const retryPlan = normalizePlanGroups(retryResult.value, validTabIds, idMap);
                     const retryValidation = validateGroupingPlan(retryPlan, labeledTabs);
 
                     if (retryValidation.valid || retryValidation.violations.length < validation.violations.length) {
@@ -432,21 +423,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   );
                   if (isSevereCollapse && labeledTabs.length >= 6) {
                     console.warn('[ServiceWorker] Model returned degenerate grouping plan; falling back to Pass-1 topic clusters');
-                    const fallbackGroupsMap = new Map();
-                    for (const t of labeledTabs) {
-                      const key = (t.entity || t.subject || 'Reference').trim();
-                      if (!fallbackGroupsMap.has(key)) fallbackGroupsMap.set(key, []);
-                      fallbackGroupsMap.get(key).push(t.id);
-                    }
+                    const fallbackGroups = buildSemanticTopicClusters(labeledTabs, tabData.tabs);
                     plan = {
                       summary: 'Tabs organized into semantic topic clusters.',
-                      groups: Array.from(fallbackGroupsMap.entries()).map(([title, ids]) => ({
-                        title,
-                        label: title,
-                        color: 'blue',
-                        rationale: `Grouped by semantic topic (${title})`,
-                        tabIds: ids
-                      })),
+                      groups: fallbackGroups,
                       warning: `Note: Grouping plan was adjusted to prevent topic collapse (${validation.violations[0]}).`
                     };
                   } else {

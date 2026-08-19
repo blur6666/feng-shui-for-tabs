@@ -1,113 +1,91 @@
-# Tab Intelligence - Local LLM Chrome Tab Organizer
+# Feng Shui for Tabs - AI Chrome Tab Organizer
 
-A Manifest V3 Chrome Extension that harvests maximum semantic data from all open browser tabs across all windows and uses a **Local LLM** (Ollama, Gemini Nano Built-in AI, or LM Studio) to synthesize and organize your browser into clean, color-coded Chrome Tab Groups.
-
----
-
-## 🌟 Key Capabilities
-
-1. **Deep Cross-Window Harvesting ("Maximum Data")**:
-   - Tab structural metadata (`windowId`, `tabId`, `pinned`, `audible`, `discarded`, `lastAccessed`).
-   - Page meta tags (`description`, `og:title`, `keywords`, `canonical`).
-   - Schema.org microdata / JSON-LD entity detection.
-   - H1–H3 heading hierarchy outline.
-   - Platform-specific extractors (GitHub repos/issues, YouTube videos/channels, StackOverflow tags, Reddit subreddits, E-commerce).
-   - Sanitized Readability content extraction (boilerplate-free article text).
-2. **Local LLM Provider Agnostic**:
-   - **Ollama** (`http://localhost:11434` with `llama3.1:8b`, `qwen2.5:7b`, `mistral`, `deepseek-r1:8b`, etc.).
-   - **Chrome Built-in Prompt API (Gemini Nano)**: Zero-setup on-device AI.
-   - **LM Studio / vLLM / LocalAI** (`http://localhost:1234` OpenAI-compatible endpoint).
-3. **Interactive Side Panel Diff & Customization**:
-   - Real-time token streaming and progress visualization.
-   - Interactive group editing: rename titles, change Chrome colors, drag-and-drop tab assignments.
-   - Smart deduplication detection with 1-click duplicate tab closing.
-4. **Chrome Tab Groups Execution & 1-Click Undo**:
-   - Native `chrome.tabs.group()` and `chrome.tabGroups.update()` automation.
-   - Session snapshot rollback to restore previous window and group states.
+A Manifest V3 Chrome Extension that organizes open browser tabs into clean, color-coded Chrome Tab Groups using local AI (Ollama, Gemini Nano, LM Studio) or cloud LLM APIs (Google Gemini, Anthropic Claude, OpenAI, Groq, OpenRouter).
 
 ---
 
-## 🚀 How to Install and Run in Chrome
+## Features
 
-### 1. Load Unpacked Extension
-1. Open Google Chrome and navigate to `chrome://extensions`.
-2. Turn ON **Developer mode** (toggle in the top right corner).
+- **Semantic Two-Pass Grouping**: Labels tabs by topic and task rather than website or domain name, then clusters them into Chrome tab groups.
+- **Local & Cloud LLM Providers**: Works with local offline engines (Ollama, Chrome Built-in Gemini Nano, LM Studio) and cloud APIs (Google Gemini, Anthropic Claude, OpenAI, Groq, OpenRouter).
+- **Privacy Shield**: Blocklist sensitive domains, wildcards (`*.bank.com`), or local files (`file://`) so matching tabs are never sent to any LLM.
+- **Granularity Control**: Choose between **Broad** (2–4 umbrella groups), **Balanced** (4–8 topic groups), or **Detailed** (8+ specific groups).
+- **Manual Control & Junk Cleanup**: Deterministically detect and bulk-close duplicate tabs, empty/new tabs, expired OAuth redirects, and error pages.
+- **Preview & Reversible**: Review proposed titles and colors before applying. Dismiss with **Cancel**, or restore previous tab layout with 1-click **Undo**.
+- **Adaptive Performance**: Automatically routes large tab sets (20+ tabs) through token-optimized Fast pipelines to keep analysis latency bounded.
+
+---
+
+## Installation
+
+1. Open Google Chrome and go to `chrome://extensions`.
+2. Enable **Developer mode** (toggle in the top-right corner).
 3. Click **Load unpacked**.
-4. Select the project directory: `c:\Users\bcint\proj\dev\extllm`.
-5. The **Tab Intelligence** icon will appear in your Chrome toolbar.
+4. Select the extension directory: `c:\Users\bcint\proj\dev\ext\feng-shui-for-tabs`.
+5. Click the **Feng Shui for Tabs** icon in the extensions toolbar to open the side panel.
 
-### 2. Configure Your Local LLM Backend
+---
 
-#### Option A: Ollama (Recommended for large tab counts)
-1. Ensure Ollama is running (`ollama serve` or open the Ollama desktop app).
-2. Pull a recommended model. The extension defaults a fresh install to `qwen2.5:3b`, which is fast enough for 100+ tab workloads; pull it, or any other model, yourself:
+## LLM Setup Guide
+
+Open the extension **Settings** (⚙️ icon in the top header) and choose your provider.
+
+### Option 1: Cloud APIs (Fast & No Setup)
+
+| Provider | Recommended Model | API Key |
+| :--- | :--- | :--- |
+| **Google Gemini** | `gemini-2.0-flash` | [Google AI Studio](https://aistudio.google.com/app/apikey) (Free Tier available) |
+| **Anthropic Claude** | `claude-3-5-haiku-20241022` | [Anthropic Console](https://console.anthropic.com/settings/keys) |
+| **OpenAI** | `gpt-4o-mini` | [OpenAI Platform](https://platform.openai.com/api-keys) |
+| **Groq** | `llama-3.3-70b-versatile` | [Groq Console](https://console.groq.com/keys) (Free Tier available) |
+| **OpenRouter** | `meta-llama/llama-3.3-70b-instruct` | [OpenRouter Keys](https://openrouter.ai/keys) |
+
+### Option 2: Local AI (100% Private & Offline)
+
+#### A. Ollama (Recommended for local inference)
+1. Install and start Ollama (`ollama serve` or the desktop app).
+2. Pull a recommended model:
    ```bash
    ollama run qwen2.5:3b
    # or
-   ollama run llama3.1:8b
+   ollama run llama3.2:3b
    ```
-   The extension never pulls or downloads a model automatically — it only ever sends the model name you have configured to Ollama's `/api/generate` endpoint.
-3. *Note on CORS*: If needed, launch Ollama with `OLLAMA_ORIGINS="chrome-extension://*"` or `OLLAMA_ORIGINS="*"`. The extension background service worker connects directly via extension privileges.
+3. In extension settings, select **Ollama**, enter endpoint (`http://localhost:11434`), and select model `qwen2.5:3b`.
 
-#### Option B: Chrome Built-in Prompt API (Gemini Nano)
+#### B. Chrome Built-in Prompt API (Gemini Nano)
 1. Open `chrome://flags` in Chrome 128+.
-2. Enable:
-   - `#prompt-api-for-gemini-nano` -> **Enabled**
-   - `#optimization-guide-on-device-model` -> **Enabled BypassPrefRequirement**
-3. Restart Chrome and select **Chrome Gemini Nano** in the extension settings.
+2. Set `#prompt-api-for-gemini-nano` to **Enabled**.
+3. Set `#optimization-guide-on-device-model` to **Enabled BypassPrefRequirement**.
+4. Relaunch Chrome and select **Chrome Gemini Nano** in settings.
 
-#### Option C: LM Studio / LocalAI
-1. Start local server on `http://localhost:1234` with any preferred model.
-
-#### Option D: Online / Cloud Web LLMs (Groq, Gemini Flash, OpenAI)
-1. Get a free API key from [Groq](https://console.groq.com/) or [Google AI Studio](https://aistudio.google.com/).
-2. In the extension settings, select **LM Studio / OpenAI-compatible**.
-3. Enter endpoint (e.g. `https://api.groq.com/openai/v1`), model (e.g. `llama-3.3-70b-versatile`), and paste your API key.
-4. See full setup instructions in [ONLINE_LLMS.md](file:///c:/Users/bcint/proj/dev/extllm/ONLINE_LLMS.md).
+#### C. LM Studio / LocalAI
+1. Start local server on `http://localhost:1234`.
+2. Select **LM Studio / LocalAI** in extension settings.
 
 ---
 
-## ⚡ Fast and Quality processing profiles
+## How It Works
 
-The extension selects the processing profile **automatically** from the number of open tabs — there is no selector in the side panel. Small tab sets (20 tabs or fewer) use the richer Quality profile, and larger sets use the Fast profile so latency stays bounded. The choice never switches models, pulls models, uses a cloud fallback, or increases Ollama concurrency.
+1. **Tab Harvesting**: Gathers structural metadata (title, URL, search query, repo, subreddit) from open tabs across windows. Privacy Shield rules exclude sensitive tabs client-side.
+2. **Pass 1 (Labeling)**: Batches tabs and extracts a concise semantic subject, entity, and intent for each tab.
+3. **Pass 2 (Clustering)**: Synthesizes labels into cohesive topic groups with $\le 12$-character titles and high-contrast Chrome tab group colors.
+4. **Validation & Reconciliation**: Guardrails detect and prevent domain-based grouping or collapsed clusters, ensuring every open tab is accounted for.
+5. **Review & Apply**: Edit titles or colors in the sidepanel diff preview, then click **Apply Groups**.
 
-| Profile | Used when | What it does |
-| --- | --- | --- |
-| **Fast** | More than 20 tabs | Locally routes known operational tabs before inference, sends compact evidence, token-packs up to 50 tabs per Pass-1 request, caps the effective Ollama context at 8K, bounds output, and skips a second full Pass-2 correction request. |
-| **Quality** | 20 tabs or fewer | Retains headings, keywords, platform context, and readability snippets; uses conservative 20-tab batches; and retains the validation/correction retry when the final grouping violates guardrails. |
+---
 
-Both profiles keep semantic two-pass grouping: Pass 1 labels each tab's subject/entity/intent, then Pass 2 forms Chrome tab groups. They keep one Ollama generation in flight by default because extra concurrency can increase KV-cache pressure and make local inference slower. Advanced users can pin a specific profile by setting `grouping.analysisProfile` to `fast` or `quality` in stored settings; the default `auto` chooses by tab count.
+## Benchmark & Testing
 
-### Choosing a local model and context
-
-- **Fast:** If installed locally, a capable small model such as `qwen2.5:3b` (the shipped default for a fresh install) or `llama3.2:3b` is a practical starting point for 100-tab workloads. Select it yourself in Settings; the extension never changes your configured model automatically, and an existing installation's stored model is never overwritten or migrated.
-- **Quality:** Use the model you already trust for grouping quality. Larger models can improve labels but can dominate total latency, particularly if they load cold.
-- **`num_ctx`:** Treat the Ollama setting as a memory/quality trade-off, not a speed setting. Larger contexts reserve more memory. Fast applies an 8K effective cap; Quality uses your configured cap. Every request within a run uses that profile-effective value so Ollama can reuse its runner instead of reloading it when the context changes.
-- **Warm versus cold runs:** The first request may include model-load time. The extension sends `keep_alive` with the same profile-effective context so later requests and runs can reuse a resident model when memory permits.
-
-### Progress, cancellation, and diagnostics
-
-While an analysis runs, the side panel reports collection, Pass-1 batch completion, retry/fallback status, elapsed time, and throttled live Pass-2 output. Use **Cancel** to abort queued and in-flight work; cancellation never applies tab changes. After a completed, failed, or cancelled run, expand **analysis diagnostics** to see the safe request count, retries, timing, model-load time, and output-token rate when Ollama reports them.
-
-### Reproducible 150-tab benchmark
-
-Run the local, synthetic 150-tab benchmark against the shipped Fast-profile
-default (or pass a different positive tab count as the final argument):
+Run the synthetic regression test suites:
 
 ```bash
-node scripts/benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
-# Optional comparison:
-node scripts/benchmark-analysis-profiles.mjs quality qwen2.5:3b 150
+node scripts/test-json-repair-and-fallback.mjs
+node scripts/test-latency-profiles.mjs
+node scripts/test-reconciliation-robustness.mjs
+node scripts/test-sidepanel-profiles.mjs
 ```
 
-The JSON report records cold/warm model load, end-to-end Pass-1 and Pass-2 elapsed time, request count, retries, output stop reasons, batch count, fallback count, and coverage. Record the model, profile, context setting, and hardware alongside the report; performance is hardware- and model-dependent, so no single number is presented as universal.
-
-## 🛠️ Usage
-
-1. Click the **Tab Intelligence** action icon to open the **Side Panel**.
-2. Select your desired scope (**All Windows** vs **Current Window**) and placement (**Group In-Place** vs **Consolidate Windows**).
-3. (Optional) Enter a custom instruction (e.g. *"Group my coding research separately from leisure"*).
-4. Click **Analyze & Group Tabs**.
-5. Watch the live semantic synthesis.
-6. Review the proposed groups, adjust any titles or colors, and click **Apply Groups**.
-7. If needed, click **Undo** at any time to revert to your previous state.
+Run the 150-tab benchmark against Ollama:
+```bash
+node scripts/benchmark-analysis-profiles.mjs fast qwen2.5:3b 150
+```

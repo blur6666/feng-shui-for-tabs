@@ -10,6 +10,8 @@ let appState = {
   settings: DEFAULT_SETTINGS,
   isAnalyzing: false,
   plan: null,
+  // True while a session snapshot from an applied grouping is still restorable.
+  canUndo: false,
   rawTabsMap: new Map(),
   totalTabs: 0,
   windowsCount: 0,
@@ -54,6 +56,7 @@ const elements = {
   groupsList: document.getElementById('groups-list'),
   footerActions: document.getElementById('footer-actions'),
   btnApply: document.getElementById('btn-apply'),
+  btnCancelPlan: document.getElementById('btn-cancel-plan'),
   btnUndo: document.getElementById('btn-undo'),
   btnSaveSettings: document.getElementById('btn-save-settings'),
   btnTestConnection: document.getElementById('btn-test-connection'),
@@ -128,6 +131,12 @@ async function loadSettings() {
   appState.settings = mergeSettings(data.settings || {});
   if (data.granularity && elements.selectGranularity) {
     elements.selectGranularity.value = data.granularity;
+  }
+  if (appState.settings.grouping?.scope && elements.selectScope) {
+    elements.selectScope.value = appState.settings.grouping.scope;
+  }
+  if (appState.settings.grouping?.consolidation && elements.selectConsolidation) {
+    elements.selectConsolidation.value = appState.settings.grouping.consolidation;
   }
   updateSettingsUI();
   updateMainUIState();
@@ -281,6 +290,20 @@ function setupEventListeners() {
     });
   }
 
+  // Scope and Placement change listeners
+  if (elements.selectScope) {
+    elements.selectScope.addEventListener('change', (e) => {
+      appState.settings.grouping.scope = e.target.value;
+      chrome.storage.local.set({ settings: appState.settings });
+    });
+  }
+  if (elements.selectConsolidation) {
+    elements.selectConsolidation.addEventListener('change', (e) => {
+      appState.settings.grouping.consolidation = e.target.value;
+      chrome.storage.local.set({ settings: appState.settings });
+    });
+  }
+
   // Dropdown provider change
   if (elements.selectProvider) {
     elements.selectProvider.addEventListener('change', (e) => {
@@ -333,6 +356,9 @@ function setupEventListeners() {
   // Analyze Button
   elements.btnAnalyze.addEventListener('click', startAnalysis);
   elements.btnCancelAnalysis?.addEventListener('click', cancelAnalysis);
+
+  // Cancel Proposed Plan Button
+  elements.btnCancelPlan?.addEventListener('click', cancelProposedPlan);
 
   // Apply Groups Button
   elements.btnApply.addEventListener('click', applyTabGroups);
@@ -671,6 +697,11 @@ function categorizeActions(actions) {
 function renderResults(plan) {
   elements.resultsContainer.classList.remove('hidden');
   elements.footerActions.classList.remove('hidden');
+  elements.btnCancelPlan?.classList.remove('hidden');
+  elements.btnApply?.classList.remove('hidden');
+  // Undo belongs to the applied snapshot, not to this render: a later analysis must not
+  // strand a grouping that is still restorable.
+  elements.btnUndo?.classList.toggle('hidden', !appState.canUndo);
 
   // 1. Summary
   elements.resultsSummary.textContent = plan.summary || 'Tabs organized into coherent semantic clusters.';
@@ -839,6 +870,9 @@ function renderGroupsList(groups) {
       }
       group.tabIds = [];
       card.remove();
+      if (appState.plan?.groups) {
+        appState.plan.groups = appState.plan.groups.filter(g => g.tabIds && g.tabIds.length > 0);
+      }
       await refreshTabStats();
     });
 
@@ -923,6 +957,9 @@ function renderGroupsList(groups) {
 
         if (group.tabIds.length === 0) {
           card.remove();
+          if (appState.plan?.groups) {
+            appState.plan.groups = appState.plan.groups.filter(g => g.tabIds && g.tabIds.length > 0);
+          }
         }
 
         await refreshTabStats();
@@ -949,6 +986,25 @@ function renderGroupsList(groups) {
   });
 }
 
+// Cancel Proposed Tab Groups Preview
+function cancelProposedPlan() {
+  appState.plan = null;
+  elements.resultsContainer.classList.add('hidden');
+  elements.groupsList.innerHTML = '';
+  elements.actionsList.innerHTML = '';
+
+  // Dismissing an unapplied preview must not hide the only route back to a previously
+  // applied grouping, so keep the footer alive for Undo alone when a snapshot exists.
+  if (appState.canUndo) {
+    elements.footerActions.classList.remove('hidden');
+    elements.btnCancelPlan?.classList.add('hidden');
+    elements.btnApply?.classList.add('hidden');
+    elements.btnUndo?.classList.remove('hidden');
+  } else {
+    elements.footerActions.classList.add('hidden');
+  }
+}
+
 // Apply Tab Groups to Chrome
 async function applyTabGroups() {
   if (!appState.plan) return;
@@ -971,6 +1027,10 @@ async function applyTabGroups() {
 
     if (response && response.success) {
       elements.btnApply.textContent = '✓ Groups Applied!';
+      appState.canUndo = true;
+      elements.btnCancelPlan?.classList.add('hidden');
+      elements.btnUndo?.classList.remove('hidden');
+      elements.btnUndo.disabled = false;
       setTimeout(() => {
         elements.btnApply.textContent = 'Apply Groups';
         elements.btnApply.disabled = false;
@@ -996,6 +1056,10 @@ async function undoTabGroups() {
 
     if (response && response.success) {
       alert('✓ Previous tab organization restored.');
+      appState.canUndo = false;
+      elements.btnUndo?.classList.add('hidden');
+      elements.footerActions.classList.add('hidden');
+      elements.resultsContainer.classList.add('hidden');
       await refreshTabStats();
     } else {
       throw new Error(response?.error || 'No snapshot found to undo');

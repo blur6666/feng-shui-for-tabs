@@ -1,0 +1,5 @@
+node_modules/
+*.log
+*.psd
+icons/2icon-*
+icons/3icon-*

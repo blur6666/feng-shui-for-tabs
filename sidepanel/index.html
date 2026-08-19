@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tab Intelligence</title>
+  <title>Feng Shui for Tabs</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -29,7 +29,7 @@
       <div class="header-actions">
         <button id="btn-health" class="btn-icon status-badge unconfigured"
           title="Choose your local or remote LLM in the gear icon">
-          <span class="status-dot"></span>1.
+          <span class="status-dot"></span>
           <span id="provider-label" class="provider-label">First Select AI ➜ </span>
         </button>
         <button id="btn-settings" class="btn-icon" title="Settings">
@@ -160,9 +160,17 @@
       </div>
     </main>
 
-    <!-- Footer Controls (Apply & Undo) -->
+    <!-- Footer Controls (Apply & Cancel / Undo) -->
     <footer id="footer-actions" class="footer-actions hidden">
-      <button id="btn-undo" class="btn-secondary" title="Restore previous tab grouping">
+      <button id="btn-cancel-plan" class="btn-secondary" title="Dismiss proposed plan without applying changes">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        <span>Cancel</span>
+      </button>
+      <button id="btn-undo" class="btn-secondary hidden" title="Restore previous tab organization">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <polyline points="1 4 1 10 7 10"></polyline>
