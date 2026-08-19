@@ -130,6 +130,12 @@ async function loadSettings() {
   if (data.granularity && elements.selectGranularity) {
     elements.selectGranularity.value = data.granularity;
   }
+  if (appState.settings.grouping?.scope && elements.selectScope) {
+    elements.selectScope.value = appState.settings.grouping.scope;
+  }
+  if (appState.settings.grouping?.consolidation && elements.selectConsolidation) {
+    elements.selectConsolidation.value = appState.settings.grouping.consolidation;
+  }
   updateSettingsUI();
   updateMainUIState();
 }
@@ -279,6 +285,20 @@ function setupEventListeners() {
   if (elements.selectGranularity) {
     elements.selectGranularity.addEventListener('change', (e) => {
       chrome.storage.local.set({ granularity: e.target.value });
+    });
+  }
+
+  // Scope and Placement change listeners
+  if (elements.selectScope) {
+    elements.selectScope.addEventListener('change', (e) => {
+      appState.settings.grouping.scope = e.target.value;
+      chrome.storage.local.set({ settings: appState.settings });
+    });
+  }
+  if (elements.selectConsolidation) {
+    elements.selectConsolidation.addEventListener('change', (e) => {
+      appState.settings.grouping.consolidation = e.target.value;
+      chrome.storage.local.set({ settings: appState.settings });
     });
   }
 
@@ -845,6 +865,9 @@ function renderGroupsList(groups) {
       }
       group.tabIds = [];
       card.remove();
+      if (appState.plan?.groups) {
+        appState.plan.groups = appState.plan.groups.filter(g => g.tabIds && g.tabIds.length > 0);
+      }
       await refreshTabStats();
     });
 
@@ -929,6 +952,9 @@ function renderGroupsList(groups) {
 
         if (group.tabIds.length === 0) {
           card.remove();
+          if (appState.plan?.groups) {
+            appState.plan.groups = appState.plan.groups.filter(g => g.tabIds && g.tabIds.length > 0);
+          }
         }
 
         await refreshTabStats();

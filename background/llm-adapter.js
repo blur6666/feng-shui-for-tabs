@@ -324,7 +324,7 @@ export class LLMAdapter {
         case PROVIDERS.GEMINI: {
           const apiKey = settings.gemini?.apiKey;
           if (!apiKey) throw new Error('Please enter your Google Gemini API Key.');
-          const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/v1/models', {
+          const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', {
             headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
           });
           if (!res.ok) throw new Error(`Gemini API returned ${res.status}: ${res.statusText}`);
@@ -466,12 +466,12 @@ export class LLMAdapter {
 
       case PROVIDERS.OPENROUTER:
         return this._callOpenAICompatible({
-          endpoint: 'https://openrouter.ai/api',
+          endpoint: 'https://openrouter.ai/api/v1',
           model: settings.openrouter?.model || 'meta-llama/llama-3.3-70b-instruct',
           apiKey: settings.openrouter?.apiKey,
           headers: {
-            'HTTP-Referer': 'https://tabintelligence.local',
-            'X-Title': 'Tab Intelligence'
+            'HTTP-Referer': 'https://fengshuifortabs.local',
+            'X-Title': 'Feng Shui for Tabs'
           },
           prompt,
           options
@@ -479,7 +479,7 @@ export class LLMAdapter {
 
       case PROVIDERS.GROQ:
         return this._callOpenAICompatible({
-          endpoint: 'https://api.groq.com/openai',
+          endpoint: 'https://api.groq.com/openai/v1',
           model: settings.groq?.model || 'llama-3.3-70b-versatile',
           apiKey: settings.groq?.apiKey,
           prompt,
@@ -652,7 +652,14 @@ export class LLMAdapter {
     if (apiKey && apiKey.trim()) requestHeaders.Authorization = `Bearer ${apiKey.trim()}`;
 
     const baseUrl = endpoint.replace(/\/+$/, '');
-    const url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+    let url;
+    if (baseUrl.endsWith('/chat/completions')) {
+      url = baseUrl;
+    } else if (baseUrl.endsWith('/v1') || baseUrl.endsWith('/openai')) {
+      url = `${baseUrl}/chat/completions`;
+    } else {
+      url = `${baseUrl}/v1/chat/completions`;
+    }
 
     try {
       const res = await fetch(url, {

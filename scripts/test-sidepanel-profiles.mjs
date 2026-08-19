@@ -164,4 +164,15 @@ btnCancelPlan.listeners.click[0]();
 assert.equal(elements.get('results-container').classList.contains('hidden'), true);
 assert.equal(elements.get('footer-actions').classList.contains('hidden'), true);
 
-console.log('Sidepanel progress, throttling, cancellation, diagnostics, and no-selector checks passed');
+// Test Scope and Consolidation Dropdown Persistence
+const selectScope = elements.get('select-scope');
+assert.ok(selectScope.listeners.change?.length > 0, 'select-scope must have change listener');
+selectScope.listeners.change[0]({ target: { value: 'current_window' } });
+assert.equal(savedSettings.at(-1)?.settings?.grouping?.scope, 'current_window');
+
+const selectConsolidation = elements.get('select-consolidation');
+assert.ok(selectConsolidation.listeners.change?.length > 0, 'select-consolidation must have change listener');
+selectConsolidation.listeners.change[0]({ target: { value: 'consolidate_windows' } });
+assert.equal(savedSettings.at(-1)?.settings?.grouping?.consolidation, 'consolidate_windows');
+
+console.log('Sidepanel progress, throttling, cancellation, diagnostics, dropdown persistence, and no-selector checks passed');

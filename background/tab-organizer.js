@@ -650,6 +650,9 @@ export class TabOrganizer {
         if (tabsInOtherWindows.length > 0) {
           try {
             await chrome.tabs.move(tabsInOtherWindows, { windowId: targetWindowId, index: -1 });
+            for (const tab of verifiedTabs) {
+              tab.windowId = targetWindowId;
+            }
           } catch (err) {
             console.warn('Could not move tabs across windows:', err);
           }
@@ -706,10 +709,14 @@ export class TabOrganizer {
 
     const { tabs } = lastTabSnapshot;
 
-    // 1. Ungroup all currently open non-pinned tabs first
+    // 1. Ungroup all currently open non-pinned tabs and track current locations
     const currentWindows = await chrome.windows.getAll({ populate: true });
+    const currentTabMap = new Map();
     for (const win of currentWindows) {
       if (win.type !== 'normal') continue;
+      for (const tab of win.tabs || []) {
+        currentTabMap.set(tab.id, tab);
+      }
       const groupedTabIds = (win.tabs || [])
         .filter(t => t.groupId && t.groupId !== -1 && !t.pinned)
         .map(t => t.id);
@@ -719,6 +726,19 @@ export class TabOrganizer {
           await chrome.tabs.ungroup(groupedTabIds);
         } catch (err) {
           console.warn('Error ungrouping tabs during undo:', err);
+        }
+      }
+    }
+
+    // Move tabs back to snapshot window if window still exists and tab moved
+    const openWindowIds = new Set(currentWindows.map(w => w.id));
+    for (const snap of tabs) {
+      const currentTab = currentTabMap.get(snap.tabId);
+      if (currentTab && openWindowIds.has(snap.windowId) && currentTab.windowId !== snap.windowId) {
+        try {
+          await chrome.tabs.move(snap.tabId, { windowId: snap.windowId, index: snap.index ?? -1 });
+        } catch (err) {
+          console.warn(`Could not restore tab #${snap.tabId} to original window #${snap.windowId}:`, err);
         }
       }
     }
